@@ -15,7 +15,7 @@ Every phase ends with something measurable, and nothing ships unless it beats th
 
 ---
 
-## Phase 0: Project setup ✅
+## Phase 0: Project setup 
 
 Package layout, tests, lint, CI, settings, and the rules as data in `rules.py`.
 
