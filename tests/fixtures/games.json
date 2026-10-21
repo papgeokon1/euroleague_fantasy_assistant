@@ -1,0 +1,300 @@
+[
+ {
+  "id": "36b71746-aa99-4b5f-bac4-986444b0b917",
+  "identifier": "E2025_1",
+  "gameCode": 1,
+  "season": {
+   "name": "EuroLeague 2025-26",
+   "code": "E2025",
+   "alias": "2025-26",
+   "competitionCode": "E",
+   "year": 2025,
+   "startDate": "2025-07-01T00:00:00"
+  },
+  "group": {
+   "id": "b423dc4c-c635-422d-ad84-83cbe5caf086",
+   "order": 1,
+   "name": "Group Regular Season",
+   "rawName": "Regular Season"
+  },
+  "phaseType": {
+   "code": "RS",
+   "alias": "REGULAR SEASON",
+   "name": "Regular Season",
+   "isGroupPhase": true
+  },
+  "round": 1,
+  "roundAlias": "Round 1",
+  "roundName": "Round 1",
+  "played": true,
+  "date": "2025-09-30T19:45:00",
+  "confirmedDate": true,
+  "confirmedHour": true,
+  "localTimeZone": 2,
+  "localDate": "2025-09-30T19:45:00",
+  "utcDate": "2025-09-30T17:45:00Z",
+  "local": {
+   "club": {
+    "code": "IST",
+    "name": "Anadolu Efes Istanbul",
+    "abbreviatedName": "Anadolu Efes",
+    "editorialName": "Efes",
+    "tvCode": "EFS",
+    "isVirtual": false,
+    "images": {
+     "crest": "https://media-cdn.cortextech.io/1dU3kpCqReRp93/1BSdBWIjCgOCxM/a844756c-a58d-4666-93b8-48f7337bc79d.png"
+    }
+   },
+   "score": 85,
+   "standingsScore": 85,
+   "partials": {
+    "partials1": 21,
+    "partials2": 19,
+    "partials3": 20,
+    "partials4": 25,
+    "extraPeriods": {}
+   }
+  },
+  "road": {
+   "club": {
+    "code": "TEL",
+    "name": "Maccabi Rapyd Tel Aviv",
+    "abbreviatedName": "Maccabi",
+    "editorialName": "Maccabi",
+    "tvCode": "MTA",
+    "isVirtual": false,
+    "images": {
+     "crest": "https://media-cdn.cortextech.io/1b533342-78f5-4932-b714-a7d80b5826b5.png"
+    }
+   },
+   "score": 78,
+   "standingsScore": 78,
+   "partials": {
+    "partials1": 19,
+    "partials2": 25,
+    "partials3": 15,
+    "partials4": 19,
+    "extraPeriods": {}
+   }
+  },
+  "audience": 2110,
+  "audienceConfirmed": true,
+  "socialFeed": "",
+  "operationsCode": null,
+  "referee1": {
+   "code": "OJFC",
+   "name": "JAVOR, DAMIR",
+   "alias": "JAVOR, D.",
+   "country": {
+    "code": "SLO",
+    "name": "Slovenia"
+   },
+   "images": {
+    "verticalSmall": "883i7yokjhfy7pih"
+   },
+   "active": true
+  },
+  "referee2": {
+   "code": "OJLQ",
+   "name": "ALIAGA, JORDI",
+   "alias": "ALIAGA, J.",
+   "country": {
+    "code": "ESP",
+    "name": "Spain"
+   },
+   "images": {
+    "verticalSmall": "ayrigtbycwi5iitj"
+   },
+   "active": true
+  },
+  "referee3": {
+   "code": "QJMJ",
+   "name": "GIOVANNETTI, GUIDO",
+   "alias": "GIOVANNETTI, G.",
+   "country": {
+    "code": "ITA",
+    "name": "Italy"
+   },
+   "images": {
+    "verticalSmall": "bugv8rdqtjift5pb"
+   },
+   "active": true
+  },
+  "referee4": null,
+  "venue": {
+   "name": "MORACA",
+   "code": "AUA",
+   "capacity": 5262,
+   "address": "Ivana Milutinovica BB - 81000 Podgorica - Montenegro",
+   "images": {
+    "medium": null
+   },
+   "active": true,
+   "notes": ""
+  },
+  "isNeutralVenue": false,
+  "gameStatus": "Confirmed",
+  "winner": {
+   "code": "OLY",
+   "name": "Olympiacos Piraeus",
+   "abbreviatedName": "Olympiacos",
+   "editorialName": "Olympiacos",
+   "tvCode": "OLY",
+   "isVirtual": false,
+   "images": {
+    "crest": "https://media-cdn.incrowdsports.com/789423ac-3cdf-4b89-b11c-b458aa5f59a6.png"
+   }
+  }
+ },
+ {
+  "id": "e58d48f0-0537-439e-b5b1-1318f66fa32b",
+  "identifier": "E2025_397",
+  "gameCode": 397,
+  "season": {
+   "name": "EuroLeague 2025-26",
+   "code": "E2025",
+   "alias": "2025-26",
+   "competitionCode": "E",
+   "year": 2025,
+   "startDate": "2025-07-01T00:00:00"
+  },
+  "group": {
+   "id": "3675d1cd-2ec6-44dc-86dd-9876294a01f8",
+   "order": 2,
+   "name": "Group PLAYOFF B",
+   "rawName": "PLAYOFF B"
+  },
+  "phaseType": {
+   "code": "PO",
+   "alias": "PLAYOFFS",
+   "name": "Playoffs",
+   "isGroupPhase": false
+  },
+  "round": 44,
+  "roundAlias": "Round 44",
+  "roundName": "Round 44",
+  "played": true,
+  "date": "2026-05-08T19:00:00",
+  "confirmedDate": true,
+  "confirmedHour": true,
+  "localTimeZone": 3,
+  "localDate": "2026-05-08T20:00:00",
+  "utcDate": "2026-05-08T17:00:00Z",
+  "local": {
+   "club": {
+    "code": "ZAL",
+    "name": "Zalgiris Kaunas",
+    "abbreviatedName": "Zalgiris",
+    "editorialName": "Zalgiris",
+    "tvCode": "ZAL",
+    "isVirtual": false,
+    "images": {
+     "crest": "https://media-cdn.incrowdsports.com/0aa09358-3847-4c4e-b228-3582ee4e536d.png"
+    }
+   },
+   "score": 90,
+   "standingsScore": 80,
+   "partials": {
+    "partials1": 20,
+    "partials2": 22,
+    "partials3": 20,
+    "partials4": 18,
+    "extraPeriods": {
+     "1": 10
+    }
+   }
+  },
+  "road": {
+   "club": {
+    "code": "ULK",
+    "name": "Fenerbahce Beko Istanbul",
+    "abbreviatedName": "Fenerbahce",
+    "editorialName": "Fenerbahce",
+    "tvCode": "FBB",
+    "isVirtual": false,
+    "images": {
+     "crest": "https://media-cdn.cortextech.io/1dU3kpCqReRp93/1BSdBWIjCiezrk/aa39750a-6203-49ee-a87d-edd0c6f0397d.png"
+    }
+   },
+   "score": 94,
+   "standingsScore": 80,
+   "partials": {
+    "partials1": 25,
+    "partials2": 22,
+    "partials3": 14,
+    "partials4": 19,
+    "extraPeriods": {
+     "1": 14
+    }
+   }
+  },
+  "audience": 15063,
+  "audienceConfirmed": true,
+  "socialFeed": "",
+  "operationsCode": null,
+  "referee1": {
+   "code": "OACI",
+   "name": "BELOSEVIC, ILIJA",
+   "alias": "BELOSEVIC, I.",
+   "country": {
+    "code": "SRB",
+    "name": "Serbia"
+   },
+   "images": {
+    "verticalSmall": "ayrnxwrdng99dusy"
+   },
+   "active": true
+  },
+  "referee2": {
+   "code": "OAEF",
+   "name": "GARCIA, JUAN CARLOS",
+   "alias": "GARCIA GONZALEZ, J.C.",
+   "country": {
+    "code": "ESP",
+    "name": "Spain"
+   },
+   "images": {
+    "verticalSmall": "883ghgjot7u5suil"
+   },
+   "active": true
+  },
+  "referee3": {
+   "code": "OJGG",
+   "name": "CORTES, CARLOS",
+   "alias": "CORTES, C.",
+   "country": {
+    "code": "ESP",
+    "name": "Spain"
+   },
+   "images": {
+    "verticalSmall": "87ytqfifoj5rk4lk"
+   },
+   "active": true
+  },
+  "referee4": null,
+  "venue": {
+   "name": "ZALGIRIO ARENA",
+   "code": "ATJ",
+   "capacity": 15415,
+   "address": "Karaliaus Mindaugo Av. 50, 44287 Kaunas",
+   "images": {
+    "medium": null
+   },
+   "active": true,
+   "notes": ""
+  },
+  "isNeutralVenue": false,
+  "gameStatus": "Confirmed",
+  "winner": {
+   "code": "OLY",
+   "name": "Olympiacos Piraeus",
+   "abbreviatedName": "Olympiacos",
+   "editorialName": "Olympiacos",
+   "tvCode": "OLY",
+   "isVirtual": false,
+   "images": {
+    "crest": "https://media-cdn.incrowdsports.com/789423ac-3cdf-4b89-b11c-b458aa5f59a6.png"
+   }
+  }
+ }
+]

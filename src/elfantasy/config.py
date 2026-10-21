@@ -22,5 +22,9 @@ class Settings(BaseSettings):
     def processed_dir(self) -> Path:
         return self.data_dir / "processed"
 
+    @property
+    def db_path(self) -> Path:
+        return self.processed_dir / "elfantasy.duckdb"
+
 
 settings = Settings()
