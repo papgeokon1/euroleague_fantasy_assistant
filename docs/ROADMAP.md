@@ -19,20 +19,16 @@ Every phase ends with something measurable, and nothing ships unless it beats th
 
 Package layout, tests, lint, CI, settings, and the rules as data in `rules.py`.
 
-## Phase 1: Pin down the rules (1–2 days)
+## Phase 1: Pin down the rules 
 
-The optimizer is only as good as its constraints. Confirm each of these in the in-game rules and update `rules.py`:
+The rules are in [GAME_RULES.md](GAME_RULES.md) and encoded in `rules.py`: squad, formations, multipliers, PIR, win bonus, coach scoring, transfer limits and unlimited windows. A few minor open questions are listed at the end of GAME_RULES.md.
 
-- [ ] Transfers per round, and whether double rounds and the playoffs change the limit
-- [ ] Captain: can it be switched between games during a round?
-- [ ] Lineup: 5 starters plus a sixth man? Which position constraints apply to starters?
-- [ ] Bench scoring at 50%, and whether automatic substitutions exist for players who don't play
-- [ ] Head coach: how a coach scores points
-- [ ] Maximum number of players from one club
-- [ ] Price changes: when they happen and how big they can be
-- [ ] Deadline: first game of the round, or a lock per game
+What the rules mean for the plan:
 
-**Done when:** `rules.py` has no UNVERIFIED fields and `docs/GAME_RULES.md` summarizes the rules with sources.
+- **Every player plays exactly one game per round.** There are no double-game weeks to exploit.
+- **In-round management is a real edge.** Between turns you can swap starters and bench, and move the captain to a player who hasn't played yet. That makes lineup and captain choices *options*, not fixed bets (see Phase 5b).
+- **Winning teams matter.** The +10% win bonus and the coach's margin-based score both reward predicting game results, not just box scores.
+- **Transfers are scarce** (4 per round), apart from 6 unlimited windows. Those windows are the moments for a full rebuild.
 
 ## Phase 2: Data (1–2 weeks)
 
@@ -63,10 +59,11 @@ This is the most important piece of infrastructure. It replays a past season rou
 Predict each player's points for each game.
 
 - Split it as **expected minutes × PIR per minute**. Minutes are where most of the uncertainty is.
-- Features: recent form (exponentially weighted), season and career rates, home or away, opponent's defense (PIR allowed per position), rest days and back-to-backs (EuroLeague has double-game weeks), team pace, and missing teammates (more usage for the players who remain).
+- Features: recent form (exponentially weighted), season and career rates, home or away, opponent's defense (PIR allowed per position), rest days (double-round weeks mean 2 games in about 3 days), team pace, and missing teammates (more usage for the players who remain).
 - Models: start with weighted averages, then move to a gradient-boosted model such as LightGBM.
 - Output a **distribution** (for example the 10th, 50th and 90th percentiles), not just a mean. Captain picks benefit from upside.
-- Head coach projection, built from the coach scoring rule and a team win-probability model.
+- **Game outcome model:** win probability and expected margin for every game. This drives both the +10% win bonus and the coach's score.
+- Head coach projection, built from the coach scoring table and the margin distribution.
 
 **Done when:** it beats both baselines on MAE across at least 2 held-out seasons.
 
@@ -76,12 +73,19 @@ Pick the squad as an integer linear program using PuLP or OR-Tools, the same app
 
 - Variables: squad, starters, sixth man, captain, and transfers for each round over a horizon of H rounds (3–5).
 - Objective: maximize expected points over the horizon, with future rounds counting less, while respecting the transfer limit.
-- Constraints: budget, positions, club limit, transfers, and lineup rules.
-- Account for double-game weeks: a player with 2 games that week is worth roughly twice as much.
-- Captain choice: favor the player with the best upside, not only the best mean.
+- Constraints: budget, 4/4/2 positions, at most 6 players per club, 4 transfers (unlimited in the free windows), and the allowed formations.
+- Plan around the unlimited windows (after rounds 6, 13, 18, 23, 28 and 34): use the limited rounds for small tweaks and the windows for a rebuild.
 - Tools: "best squad from scratch", "best transfers for this week", "what if I sell X".
 
-**Done when:** the backtested season score clearly beats the Phase 3 baselines, and runs fast enough to use before every deadline.
+### 5b: In-round turn strategy
+
+- Know which turn each player plays in (from the schedule).
+- Squad value includes **option value**: a strong bench player who plays in a late turn insures the early starters.
+- Captain policy: start with an early-turn captain, then after each turn decide whether to keep him or move the armband to a later player who hasn't played yet. This is a stopping problem: keep the captain if his score beats the expected score of the remaining options.
+- The same logic applies to benching a weak early starter for a later bench player.
+- `elf turn` recommends what to change after each turn.
+
+**Done when:** the backtested season score clearly beats the Phase 3 baselines, the turn strategy adds measurable points on top, and it runs fast enough to use before every deadline.
 
 ## Phase 6: Price and team-value model (1 week)
 
