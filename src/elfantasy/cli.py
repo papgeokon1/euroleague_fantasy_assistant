@@ -118,5 +118,51 @@ def data_round(
     typer.echo(df.to_string(index=False))
 
 
+@app.command()
+def backtest(
+    season: int = typer.Option(2026, help="Season start year (2026 = 2026-27)."),
+    strategy: str = typer.Option("all", help="Strategy name, or 'all'."),
+    rounds: bool = typer.Option(True, help="Show the round-by-round table."),
+) -> None:
+    """Replay a season with only pre-deadline information and score each strategy.
+
+    Seasons with fantasy prices get a full simulation (budget, transfers, lineup).
+    Older seasons only measure projection error (MAE), since there are no prices.
+    """
+    from elfantasy.backtest.data import load_season
+    from elfantasy.backtest.simulator import run_season
+    from elfantasy.backtest.strategies import STRATEGIES
+    from elfantasy.data.euroleague import season_code
+    from elfantasy.data.store import connect
+
+    names = list(STRATEGIES) if strategy == "all" else [strategy]
+    unknown = [n for n in names if n not in STRATEGIES]
+    if unknown:
+        typer.echo(f"Unknown strategy {unknown}. Choose from: {', '.join(STRATEGIES)}", err=True)
+        raise typer.Exit(1)
+
+    with connect(settings.db_path) as con:
+        data = load_season(con, season_code(season))
+    mode = "full simulation" if data.has_prices else "projection error only (no prices)"
+    typer.echo(f"{data.season}: rounds {data.rounds[0]}-{data.rounds[-1]}, {mode}\n")
+
+    summary = []
+    for name in names:
+        result = run_season(data, STRATEGIES[name]())
+        if rounds:
+            typer.echo(f"== {name}")
+            typer.echo(result.rounds.round(2).to_string(index=False))
+            typer.echo()
+        row = {"strategy": name, "mae": round(result.mae, 3), "bias": round(result.bias, 3)}
+        if data.has_prices:
+            row["total_points"] = round(result.total_points, 1)
+            row["per_round"] = round(result.total_points / len(data.rounds), 1)
+        summary.append(row)
+
+    import pandas as pd
+
+    typer.echo(pd.DataFrame(summary).to_string(index=False))
+
+
 if __name__ == "__main__":
     app()

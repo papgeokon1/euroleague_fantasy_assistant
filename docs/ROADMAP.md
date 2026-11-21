@@ -52,7 +52,22 @@ This is the most important piece of infrastructure. It replays a past season rou
 - Measures projection error (MAE and calibration) per round, and the season's total fantasy points.
 - Baseline strategies to beat: "pick the highest season-average PIR per credit" and "last 5 games average".
 
-**Done when:** `elf backtest --season 2025 --strategy baseline` produces a season score.
+**Done when:** `elf backtest --season 2026 --strategy season_avg` produces a season score.
+
+Status (2026-11-21): done. The fantasy API only has prices for the current season, so
+the full simulation (budget, transfers, lineup, score) runs on 2026-27 only and covers
+more rounds each week. Older seasons (`--season 2025` and earlier) report projection
+error only. The simulator reproduces a real official round score exactly (180.2 in
+round 13).
+
+Baselines on 2026-27, rounds 1–13:
+
+| Strategy | Season points | Per round | Projection MAE |
+|---|---|---|---|
+| `season_avg` | 1136.8 | 87.4 | 6.41 |
+| `last5` | 1351.7 | 104.0 | 6.38 |
+
+For comparison, a real manager's team scored 2049.4 over the same rounds (158 per round).
 
 ## Phase 4: Projections v1 (2 weeks)
 
