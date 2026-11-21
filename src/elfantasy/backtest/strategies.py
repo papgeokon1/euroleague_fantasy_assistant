@@ -7,6 +7,7 @@ season score. The real optimizer (Phase 5) will replace the picker.
 
 from collections import Counter
 
+import numpy as np
 import pandas as pd
 
 from elfantasy.backtest.data import COACH
@@ -205,4 +206,101 @@ class LastFive(GreedyPicker):
         return players.where(m["position"] != COACH, coaches).fillna(0.0)
 
 
-STRATEGIES = {s.name: s for s in (SeasonAverage, LastFive)}
+class ModelV1(GreedyPicker):
+    """Phase 4 projections: LightGBM play probability and points-if-he-plays, plus the
+    game model for coaches.
+
+    `project` returns the median points if the player plays (the number MAE is
+    measured on). The squad is picked on expected points, P(plays) x mean, so a
+    player likely to miss the game is avoided.
+
+    Models are trained only on seasons before the one being replayed, and features
+    only use games before each round's deadline.
+    """
+
+    name = "model_v1"
+
+    def __init__(self, db_path=None):
+        self.db_path = db_path
+        self._logs = None
+        self._features = None
+        self._models: dict[str, tuple] = {}
+        self._expected: pd.Series | None = None
+
+    def _load(self):
+        if self._logs is None:
+            import duckdb
+
+            from elfantasy.config import settings
+            from elfantasy.model.features import Logs, build_features, training_targets
+
+            path = self.db_path or settings.db_path
+            with duckdb.connect(str(path), read_only=True) as con:
+                self._logs = Logs.load(con)
+            seasons = sorted(self._logs.player["season"].unique())
+            self._features = build_features(self._logs, training_targets(self._logs, seasons))
+        return self._logs
+
+    def _fit(self, season: str):
+        if season not in self._models:
+            from elfantasy.model.features import team_game_features
+            from elfantasy.model.game import GameModel
+            from elfantasy.model.projection import ProjectionModel
+
+            logs = self._load()
+            train = tuple(s for s in sorted(self._features["season"].unique()) if s < season)
+            if not train:
+                raise ValueError(f"no seasons before {season} to train on")
+            games = team_game_features(logs)
+            self._models[season] = (
+                ProjectionModel.fit(self._features, train),
+                GameModel.fit(games[games["season"].isin(train)]),
+            )
+        return self._models[season]
+
+    def predict(self, ctx: RoundContext) -> pd.DataFrame:
+        """Per market player: p_play, mean, q10, q50, q90, expected (coaches: expected
+        coach points in `expected` and `q50`)."""
+        from elfantasy.model.features import build_features
+
+        logs = self._load()
+        players, games = self._fit(ctx.season)
+        m = ctx.market
+        is_coach = m["position"] == COACH
+        out = pd.DataFrame(0.0, index=m.index, columns=["p_play", "mean", "q10", "q50", "q90"])
+
+        known = m[~is_coach & m["el_code"].notna()]
+        if len(known):
+            targets = pd.DataFrame(
+                {"season": ctx.season, "round": ctx.round, "el_code": known["el_code"].to_numpy(),
+                 "team_code": known["el_team"].to_numpy()}
+            )  # fmt: skip
+            pred = players.predict(build_features(logs, targets))
+            pred.index = known.index
+            out.loc[known.index, pred.columns.drop("expected")] = pred.drop(columns="expected")
+
+        coaches = m[is_coach]
+        if len(coaches):
+            targets = pd.DataFrame(
+                {"season": ctx.season, "round": ctx.round, "el_code": "__coach__",
+                 "team_code": coaches["el_team"].to_numpy()}
+            )  # fmt: skip
+            x = build_features(logs, targets)
+            pts = games.coach_points(x["team_str"], x["opp_str"], x["home"].fillna(0.5), ctx.rules)
+            out.loc[coaches.index, ["p_play", "mean", "q50"]] = np.column_stack(
+                [np.ones(len(pts)), pts, pts]
+            )
+        out["expected"] = out["p_play"] * out["mean"]
+        return out
+
+    def project(self, ctx: RoundContext) -> pd.Series:
+        pred = self.predict(ctx)
+        self._expected = pred["expected"]
+        return pred["q50"]
+
+    def pick(self, ctx: RoundContext, projections: pd.Series) -> Lineup:
+        # Pick on expected points (which account for the chance of not playing).
+        return super().pick(ctx, self._expected.reindex(ctx.market.index).fillna(0.0))
+
+
+STRATEGIES = {s.name: s for s in (SeasonAverage, LastFive, ModelV1)}

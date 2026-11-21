@@ -82,6 +82,25 @@ Predict each player's points for each game.
 
 **Done when:** it beats both baselines on MAE across at least 2 held-out seasons.
 
+Status (2026-11-21): v1 done, as the `model_v1` strategy (code in `src/elfantasy/model/`).
+LightGBM predicts P(plays) and points if he plays (mean plus 10th/50th/90th
+percentiles), from leak-free features: weighted form, season/previous/career rates,
+availability (games missed, games played in the team's last 5), home/away, rest,
+team and opponent strength, and points the opponent allows by position. Each season
+is predicted by a model trained only on earlier seasons.
+
+| | season_avg | last5 | model_v1 |
+|---|---|---|---|
+| MAE 2024-25 (held out) | 5.95 | 6.10 | **5.79** |
+| MAE 2025-26 (held out) | 6.11 | 6.29 | **5.90** |
+| MAE 2026-27 | 6.41 | 6.38 | **5.96** |
+| Season points 2026-27, rounds 1–13 | 1137 | 1352 | **1722** |
+
+Known gaps for v2: the game model (weighted margin plus home advantage) predicts
+winners no better than "the home team wins". The 10th–90th percentile range covers
+about 77% of outcomes instead of 80%. Missing teammates and team pace aren't
+features yet. Injury and lineup news (Phase 7) isn't used.
+
 ## Phase 5: Optimizer (2 weeks)
 
 Pick the squad as an integer linear program using PuLP or OR-Tools, the same approach as the strongest fantasy football (FPL) solvers.
