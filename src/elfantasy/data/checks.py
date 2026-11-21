@@ -62,5 +62,39 @@ CHECKS: dict[str, str] = {
 }
 
 
+# Run only once `player_map` exists (it needs the fantasy data). These are warnings, not
+# failures: a few players (late signings, youth call-ups) are never added to the game.
+PLAYER_MAP_CHECKS: dict[str, str] = {
+    # Everyone who played this season should be in the fantasy game.
+    "unmapped_player": """
+        SELECT p.season, p.team_code, p.player_code, any_value(p.player_name) AS name,
+               count(*) AS games
+        FROM player_games p
+        WHERE p.season IN (SELECT DISTINCT season FROM player_map)
+          AND p.player_code NOT IN (
+              SELECT el_code FROM player_map m WHERE m.season = p.season AND m.kind = 'player')
+        GROUP BY ALL
+    """,
+    "unmapped_coach": """
+        SELECT c.season, c.team_code, c.coach_code, any_value(c.coach_name) AS name,
+               count(*) AS games
+        FROM coach_games c
+        WHERE c.season IN (SELECT DISTINCT season FROM player_map)
+          AND c.coach_code NOT IN (
+              SELECT el_code FROM player_map m WHERE m.season = c.season AND m.kind = 'coach')
+        GROUP BY ALL
+    """,
+}
+
+
+WARNINGS = set(PLAYER_MAP_CHECKS)
+
+
 def run_checks(con: duckdb.DuckDBPyConnection) -> dict[str, pd.DataFrame]:
-    return {name: con.sql(query).df() for name, query in CHECKS.items()}
+    checks = dict(CHECKS)
+    tables = {
+        r[0] for r in con.execute("SELECT table_name FROM information_schema.tables").fetchall()
+    }
+    if "player_map" in tables:
+        checks |= PLAYER_MAP_CHECKS
+    return {name: con.execute(query).df() for name, query in checks.items()}

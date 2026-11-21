@@ -22,6 +22,18 @@ game's terms of use before automating calls against it.
   the current one.
 - `fantasy_schedule`: every game of all 38 rounds, with its `turn`.
 
+- `player_map`: links each `fantasy_prices.player_id` to a EuroLeague `player_code`, or to
+  `coach_code` for coaches. It's rebuilt by both `elf data fantasy` and `elf data sync`.
+  Teams are paired by matching kickoff times (fantasy `EFS` = EuroLeague `IST`, `RMB` =
+  `MAD`, ...), and players by name within their team. The game has **one Head Coach entry
+  per club** and renames it when the coach changes, so coaches are linked by team. A
+  few players who appear in box scores were never added to the game; `elf data check`
+  lists them as warnings.
+- The game's average fantasy points (`fpt`) count only games a player actually played.
+  Our `player_games` table also has did-not-play rows with 0 seconds, so filter on
+  `seconds > 0` to get the same averages. With that filter, the 311 linked players match
+  the game's averages to within rounding.
+
 **Run `elf data fantasy` at least once every round, before the deadline.** Past rounds'
 prices can always be downloaded again, but ownership and injury values can only be
 captured live. Those live files in `data/raw/fantasy/` are never overwritten, and they

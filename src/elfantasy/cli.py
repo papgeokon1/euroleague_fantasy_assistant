@@ -29,13 +29,16 @@ def data_sync(
     last: int = typer.Option(2026, help="Last season start year."),
 ) -> None:
     """Download games and box scores into the local database."""
-    from elfantasy.data.euroleague import EuroleagueClient
+    from elfantasy.data.euroleague import EuroleagueClient, season_code
+    from elfantasy.data.player_map import refresh_player_map
     from elfantasy.data.store import connect
     from elfantasy.data.sync import sync_season
 
     with EuroleagueClient(settings.raw_dir) as client, connect(settings.db_path) as con:
         for year in range(first, last + 1):
             sync_season(client, con, year, log=typer.echo)
+            if season_code(year) == settings.season_code:
+                refresh_player_map(con, settings.season_code, log=typer.echo)
 
 
 @data_app.command("fantasy")
@@ -46,6 +49,7 @@ def data_fantasy() -> None:
     can only be captured live for the current round.
     """
     from elfantasy.data.fantasy import FantasyAuthError, FantasyClient
+    from elfantasy.data.player_map import refresh_player_map
     from elfantasy.data.store import connect
     from elfantasy.data.sync_fantasy import sync_fantasy
 
@@ -59,6 +63,7 @@ def data_fantasy() -> None:
             connect(settings.db_path) as con,
         ):
             sync_fantasy(client, con, settings.season_code, log=typer.echo)
+            refresh_player_map(con, settings.season_code, log=typer.echo)
     except FantasyAuthError as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(1) from e
@@ -67,7 +72,7 @@ def data_fantasy() -> None:
 @data_app.command("check")
 def data_check() -> None:
     """Sanity-check the database. Exits with an error if any check fails."""
-    from elfantasy.data.checks import run_checks
+    from elfantasy.data.checks import WARNINGS, run_checks
     from elfantasy.data.store import connect
 
     with connect(settings.db_path) as con:
@@ -82,9 +87,10 @@ def data_check() -> None:
         typer.echo()
         failed = False
         for name, rows in run_checks(con).items():
-            typer.echo(f"{'OK  ' if rows.empty else 'FAIL'} {name}: {len(rows)} rows")
+            status = "OK  " if rows.empty else "WARN" if name in WARNINGS else "FAIL"
+            typer.echo(f"{status} {name}: {len(rows)} rows")
             if not rows.empty:
-                failed = True
+                failed = failed or name not in WARNINGS
                 typer.echo(rows.head(10).to_string(index=False))
     if failed:
         raise typer.Exit(1)
