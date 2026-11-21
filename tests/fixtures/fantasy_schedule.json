@@ -1,0 +1,101 @@
+{
+ "data": {
+  "id": 1541,
+  "number": 14,
+  "rounds": [
+   {
+    "id": 2554,
+    "number": 1,
+    "matches": [
+     {
+      "id": 12056,
+      "status": "scheduled",
+      "ot": false,
+      "started_at": "2026-11-24T17:00:00.000000Z",
+      "home_team": {
+       "id": 158,
+       "name": "Besiktas Fuzul Istanbul",
+       "abbreviation": "BJK",
+       "score": null,
+       "is_valid": true
+      },
+      "away_team": {
+       "id": 150,
+       "name": "Paris Basketball",
+       "abbreviation": "PBB",
+       "score": null,
+       "is_valid": true
+      }
+     },
+     {
+      "id": 12055,
+      "status": "scheduled",
+      "ot": false,
+      "started_at": "2026-11-24T18:00:00.000000Z",
+      "home_team": {
+       "id": 144,
+       "name": "Crvena Zvezda Meridianbet Belgrade",
+       "abbreviation": "CZV",
+       "score": null,
+       "is_valid": true
+      },
+      "away_team": {
+       "id": 154,
+       "name": "Virtus Bologna",
+       "abbreviation": "VIR",
+       "score": null,
+       "is_valid": true
+      }
+     }
+    ]
+   },
+   {
+    "id": 2555,
+    "number": 2,
+    "matches": [
+     {
+      "id": 12061,
+      "status": "scheduled",
+      "ot": false,
+      "started_at": "2026-11-25T16:00:00.000000Z",
+      "home_team": {
+       "id": 311,
+       "name": "Dubai Basketball",
+       "abbreviation": "DUB",
+       "score": null,
+       "is_valid": true
+      },
+      "away_team": {
+       "id": 152,
+       "name": "Partizan Mozzart Bet Belgrade",
+       "abbreviation": "PAR",
+       "score": null,
+       "is_valid": true
+      }
+     },
+     {
+      "id": 12064,
+      "status": "scheduled",
+      "ot": false,
+      "started_at": "2026-11-25T19:15:00.000000Z",
+      "home_team": {
+       "id": 149,
+       "name": "Olympiacos Piraeus",
+       "abbreviation": "OLY",
+       "score": null,
+       "is_valid": true
+      },
+      "away_team": {
+       "id": 165,
+       "name": "Hapoel IBI Tel Aviv",
+       "abbreviation": "HTA",
+       "score": null,
+       "is_valid": true
+      }
+     }
+    ]
+   }
+  ],
+  "resting_teams": []
+ }
+}

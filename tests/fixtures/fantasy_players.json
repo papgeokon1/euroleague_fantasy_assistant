@@ -1,0 +1,114 @@
+{
+ "data": [
+  {
+   "id": 3765,
+   "first_name": "Mike",
+   "last_name": "James",
+   "quotation": 14.7,
+   "jersey": "55",
+   "face_path": null,
+   "avg_pts": 14.1,
+   "is_on_fire": false,
+   "popularity": 0.004,
+   "position": {
+    "id": 28,
+    "name": "Guard"
+   },
+   "team": {
+    "id": 146,
+    "name": "Anadolu Efes Istanbul",
+    "abbreviation": "EFS",
+    "position": "away"
+   },
+   "opponent": {
+    "id": 143,
+    "name": "Kosner Baskonia Vitoria-Gasteiz",
+    "abbreviation": "KBA"
+   },
+   "round": {
+    "id": 2555,
+    "number": 2
+   },
+   "is_injured": true,
+   "probability_of_playing": 0,
+   "fantasy_team": null,
+   "started_from_bench": false,
+   "label": "opponent"
+  },
+  {
+   "id": 3766,
+   "first_name": "Sasha",
+   "last_name": "Vezenkov",
+   "quotation": 20,
+   "jersey": "14",
+   "face_path": null,
+   "avg_pts": 25.77,
+   "is_on_fire": true,
+   "popularity": 0.503,
+   "position": {
+    "id": 29,
+    "name": "Forward"
+   },
+   "team": {
+    "id": 149,
+    "name": "Olympiacos Piraeus",
+    "abbreviation": "OLY",
+    "position": "home"
+   },
+   "opponent": {
+    "id": 165,
+    "name": "Hapoel IBI Tel Aviv",
+    "abbreviation": "HTA"
+   },
+   "round": {
+    "id": 2555,
+    "number": 2
+   },
+   "is_injured": false,
+   "probability_of_playing": 1,
+   "fantasy_team": null,
+   "started_from_bench": false,
+   "label": "opponent"
+  },
+  {
+   "id": 3868,
+   "first_name": "Zeljko",
+   "last_name": "Obradovic",
+   "quotation": 10.1,
+   "jersey": null,
+   "face_path": null,
+   "avg_pts": 10.38,
+   "is_on_fire": null,
+   "popularity": 0.073,
+   "position": {
+    "id": 31,
+    "name": "Head Coach"
+   },
+   "team": {
+    "id": 151,
+    "name": "Panathinaikos AKTOR Athens",
+    "abbreviation": "PAO",
+    "position": "away"
+   },
+   "opponent": {
+    "id": 174,
+    "name": "Valencia Basket",
+    "abbreviation": "VBC"
+   },
+   "round": {
+    "id": 2554,
+    "number": 1
+   },
+   "is_injured": false,
+   "probability_of_playing": 1,
+   "fantasy_team": null,
+   "started_from_bench": true,
+   "label": "opponent"
+  }
+ ],
+ "meta": {
+  "current_page": 1,
+  "last_page": 1,
+  "total": 3
+ }
+}
