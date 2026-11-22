@@ -69,6 +69,8 @@ def optimize(
     forced_in: set | None = None,
     time_limit: float = 60,
     prune: bool = True,
+    value: pd.DataFrame | None = None,
+    value_weight: float = 0.0,
 ) -> Plan:
     """Best plan over len(proj.columns) rounds.
 
@@ -78,12 +80,22 @@ def optimize(
     current: the squad owned now (players and coach). None means building from scratch.
     limits: transfers allowed into each horizon round (None = unlimited). Ignored
         for round 0 when `current` is None.
+    value: expected price change per player and horizon round (same shape as proj).
+        Owning a player through round t earns value_weight x his expected change, so
+        the plan prefers players likely to rise (Phase 6). value_weight is points per
+        credit of team value.
     """
     proj = proj.reindex(market.index).fillna(0.0)
+    if value is not None and value_weight:
+        proj_value = value.reindex(market.index).fillna(0.0).set_axis(proj.columns, axis=1)
+    else:
+        proj_value = None
     current = set(current or [])
     if prune:
         keep = candidates(market, proj, decay, current | set(forced_in or ()))
         market, proj = market.loc[keep], proj.loc[keep]
+        if proj_value is not None:
+            proj_value = proj_value.loc[keep]
     ids = list(market.index)
     rounds = list(range(proj.shape[1]))
     limits = limits or [rules.transfers_per_round] * len(rounds)
@@ -119,6 +131,9 @@ def optimize(
                 )
             )
         objective += [weight[t] * p[i] * s[i][t] for i in coaches]
+        if proj_value is not None:
+            v = proj_value.iloc[:, t]
+            objective += [weight[t] * value_weight * v[i] * s[i][t] for i in ids]
         objective += [-TRANSFER_COST * tin[i][t] for i in ids]
     prob += pulp.lpSum(objective)
 

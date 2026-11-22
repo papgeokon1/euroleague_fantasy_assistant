@@ -94,7 +94,7 @@ is predicted by a model trained only on earlier seasons.
 | MAE 2024-25 (held out) | 5.95 | 6.10 | **5.79** |
 | MAE 2025-26 (held out) | 6.11 | 6.29 | **5.90** |
 | MAE 2026-27 | 6.41 | 6.38 | **5.97** |
-| Season points 2026-27, rounds 1–13 | 1137 | 1352 | **1623** |
+| Season points 2026-27, rounds 1–13 | 1137 | 1352 | **1682** |
 
 Known gaps for v2: the game model (weighted margin plus home advantage) predicts
 winners no better than "the home team wins". The 10th–90th percentile range covers
@@ -131,8 +131,8 @@ gave the same answers 2–4× faster.
 | 2026-27, rounds 1–13 | Season points | Per round |
 |---|---|---|
 | `last5` (best baseline) | 1352 | 104.0 |
-| `model_v1` (greedy picker) | 1623 | 124.9 |
-| `model_ilp` (optimizer) | **1896** | **145.9** |
+| `model_v1` (greedy picker) | 1682 | 129.4 |
+| `model_ilp` (optimizer) | **1799** | **138.4** |
 
 `elf optimize` gives the live recommendation for the coming round: it fetches your
 squad and budget, plans 3 rounds ahead, and prints transfers, lineup, captain and each
@@ -140,10 +140,13 @@ player's range. It takes about a minute once the model is cached in `models/`. T
 game's injury flag for the current round is used live only (`--no-injuries` turns it
 off), because there's no injury history to backtest it against.
 
-LightGBM now uses a fixed seed. Before that, small run-to-run changes in projections
-sent the optimizer down different transfer paths, and season scores moved by up to
-about 10%. Read differences between strategies smaller than that with care, since
-13 rounds is still a small sample.
+Training is now reproducible. Before 2026-11-22, the training rows were built from
+Python sets, whose order changes in every process, so LightGBM sampled different rows
+on each run (a fixed seed alone didn't help). Projections then varied slightly between
+runs, which sent the optimizer down different transfer paths and moved season scores
+by up to about 10%. The numbers in this file are from reproducible runs. Even so, one
+13-round season is a small sample: two strategies' different transfer paths can move
+their totals apart by tens of points by chance.
 
 **5b, the turn strategy** (`src/elfantasy/turns.py`): a 10-player squad has 4,600 legal
 lineups (formation × starters × sixth man × captain), held as arrays. After each turn
@@ -158,13 +161,13 @@ policy gets the same squads and actual results; gain over a fixed lineup):
 
 | Policy | Points per round | 95% interval | Rounds better |
 |---|---|---|---|
-| Changes between turns only | +3.4 | 2.9 to 3.9 | 97% |
-| Simulated starting lineup only | −0.7 | −1.1 to −0.4 | 31% |
-| **Both** (`model_turns`, `elf turn`) | **+4.8** | 4.3 to 5.4 | 100% |
+| Changes between turns only | +3.4 | 2.9 to 3.9 | 100% |
+| Simulated starting lineup only | −0.6 | −1.0 to −0.2 | 35% |
+| **Both** (`model_turns`, `elf turn`) | **+4.9** | 4.3 to 5.4 | 100% |
 
-That's about +180 points over a season. A single season simulation (`model_turns`
-against `model_ilp` on 2026-27) can't show this, because small changes upstream move the
-season total by ±60 points.
+That's about +185 points over a season. A single season simulation can't show it:
+on 2026-27, `model_turns` scored 1774 against 1799 for `model_ilp`, because their
+different decisions lead to different squads and the luck of 13 rounds dominates.
 
 `elf turn` reads the live roster. Before the round it suggests the starting lineup and
 captain. After a turn it suggests the swaps and captain move. `elf optimize` also picks
@@ -180,6 +183,34 @@ opponents aren't correlated.
 - Predict next round's price changes and add a value-growth term to the optimizer. This matters most early in the season.
 
 **Done when:** we predict the direction of price changes with at least 70% accuracy, and the backtest score improves.
+
+Status (2026-11-22): the price model is done (`src/elfantasy/model/prices.py`). The
+value-growth term is built but **not shipped**, because it lowered the backtest score.
+
+- **The formula:** after a round in which a player played, change ≈ 0.040 × fantasy
+  points − 0.046 × price + 0.04, rounded to 0.1. A player who didn't play loses 0.1.
+  Prices never go below 4.0. Fitted on earlier rounds only, it reproduces 93–97% of
+  next-round prices exactly. Coaches have their own coefficients. Details are in
+  GAME_RULES.md.
+- **Before the round:** expected change = P(plays) × formula(expected points) +
+  P(doesn't play) × −0.1. Over rounds 4–13 it ranks risers well (AUC 0.72), its rise
+  probabilities beat the base rate (Brier skill +8.5%), and expected changes are well
+  calibrated (for example, predicted −0.13 against actual −0.10).
+- **The 70% target isn't a useful test:** about 70% of price moves are falls, so
+  "always predict a fall" already scores 69.9%. Our 69.7% says nothing either way. The
+  AUC and Brier skill above are the meaningful measures.
+- **Value growth in the optimizer:** the plan earns `value_weight` points per credit of
+  expected rise (`model_value`, `elf optimize --value-weight`). On 2026-27 it raised
+  team value by about 2 credits by round 13 but lowered points:
+
+  | Strategy | Season points |
+  |---|---|
+  | `model_turns` (no value term) | 1774 |
+  | `model_value` (weight 5) | 1739 |
+  | `model_value10` (weight 10) | 1718 |
+
+  So the default stays at 0. The idea may pay off once the planning horizon looks
+  further ahead than 3 rounds, or later in the season with more price history.
 
 ## Phase 7: The AI assistant layer (2 weeks)
 
@@ -203,6 +234,13 @@ Claude with tool use, built on the Anthropic SDK.
 - After every round, compare predictions with actual results, track calibration, and retrain.
 - Keep a log of every decision with the projected and actual points, to learn where the model goes wrong.
 - Compare our score each round with the top managers' scores.
+
+## Phase 10: Team quality (after Phase 9)
+
+The user isn't happy with the squads the optimizer suggests so far, even though the
+backtest scores look good. After the other phases, work on the quality of the teams
+themselves. Start from the user's concrete complaints, and compare suggested squads
+with what strong real managers pick, not only with backtest totals.
 
 ---
 

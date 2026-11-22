@@ -101,9 +101,14 @@ class GameRules(BaseModel):
     unlimited_transfers_in_postseason: bool = True
     unused_transfers_roll_over: bool = False
 
+    # Prices change after every round in steps of `price_step` and never drop below
+    # `min_price` (both observed in the 2026-27 price history). The formula itself isn't
+    # published; model/prices.py fits it (about 0.04 x points - 0.046 x price, rounded).
+    min_price: float = 4.0
+    price_step: float = 0.1
+
     # OPEN: unconfirmed rules
     win_bonus_rounding: str | None = None
-    price_change_formula: str | None = None
 
     @property
     def squad_size(self) -> int:

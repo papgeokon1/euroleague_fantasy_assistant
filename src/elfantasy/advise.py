@@ -133,6 +133,7 @@ def recommend(
     use_injuries: bool = True,
     sell: set | None = None,
     model: ModelV1 | None = None,
+    value_weight: float = 0.0,
 ) -> Recommendation:
     market = current_market(con, season, round_)
     model = model or ModelV1(con=con)
@@ -151,7 +152,21 @@ def recommend(
     proj = pd.DataFrame({r: preds[r]["expected"] for r in rounds})
     limit = None if baseline is None else rules.transfer_limit(after_round=round_ - 1)
     limits = [limit] + [rules.transfer_limit(after_round=r - 1) for r in rounds[1:]]
-    plan = optimize(market, proj, rules, budget, baseline, limits, forced_out=sell)
+    value = None
+    if value_weight:
+        from elfantasy.model.prices import PriceModel, price_history
+
+        history = price_history(con, season)
+        prices = PriceModel.fit(history[history["round"] < round_], rules)
+        if prices is not None:
+            is_coach = market["position"] == COACH
+            value = pd.DataFrame(
+                {r: prices.expected_change(market["price"], preds[r]["p_play"],
+                                           preds[r]["mean"], is_coach) for r in rounds},
+                index=market.index,
+            )  # fmt: skip
+    plan = optimize(market, proj, rules, budget, baseline, limits, forced_out=sell,
+                    value=value, value_weight=value_weight)  # fmt: skip
 
     squad = plan.squads[0]
     p0 = preds[round_]

@@ -116,3 +116,11 @@ def test_game_model():
     pts = model.coach_points([30, 0, -30], [0, 0, 0], [1, 1, 0], RULES_2026_27)
     assert pts[0] > pts[1] > pts[2]
     assert pts.min() >= -20 and pts.max() <= 25
+
+
+def test_training_rows_come_in_a_fixed_order():
+    """Row order feeds LightGBM's row sampling, so it must not depend on Python's
+    per-process set ordering."""
+    t = training_targets(Logs.load(_db()), [S])
+    for _, g in t.groupby(["season", "round", "team_code"], sort=False):
+        assert list(g["el_code"]) == sorted(g["el_code"])

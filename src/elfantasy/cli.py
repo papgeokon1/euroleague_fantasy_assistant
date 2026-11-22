@@ -194,6 +194,9 @@ def optimize(
     ),
     injuries: bool = typer.Option(True, help="Treat players the game lists as out as out."),
     team_id: int = typer.Option(None, help="Fantasy team id (default: your first team)."),
+    value_weight: float = typer.Option(
+        0.0, help="Points per credit of expected price rise (0 = ignore prices)."
+    ),
 ) -> None:
     """Recommend transfers, lineup and captain for the upcoming round.
 
@@ -248,7 +251,7 @@ def optimize(
         typer.echo(f"Round {md['number']}: budget {state['credits']}, training the model...")
         rec = recommend(con, season, md["number"], RULES_2026_27, float(state["credits"]),
                         baseline, horizon=horizon, use_injuries=injuries,
-                        sell=sell_ids)  # fmt: skip
+                        sell=sell_ids, value_weight=value_weight)  # fmt: skip
 
     t = rec.table
     view = pd.DataFrame(

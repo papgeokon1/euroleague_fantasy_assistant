@@ -291,7 +291,9 @@ def training_targets(logs: Logs, seasons: list[str]) -> pd.DataFrame:
         for rnd, r in s.groupby("round"):
             for team, tr in r.groupby("team_code"):
                 cands = seen.setdefault(team, set()) | set(tr["el_code"])
-                rows += [(season, rnd, code, team) for code in cands]
+                # sorted: set order changes between Python processes, and row order
+                # changes what LightGBM's row sampling picks.
+                rows += [(season, rnd, code, team) for code in sorted(cands)]
                 seen[team] = cands
     targets = pd.DataFrame(rows, columns=["season", "round", "el_code", "team_code"])
     targets = targets.merge(box, on=["season", "round", "el_code", "team_code"], how="left")

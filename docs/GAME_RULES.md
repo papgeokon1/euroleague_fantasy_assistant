@@ -84,7 +84,15 @@ A coach still scores if dismissed, absent or ejected.
 - For the same score, a cheaper player rises more than an expensive one.
 - Price changes change your team's total value, so a squad that gains value can afford better players later.
 - Players who miss games lose value. Stars coming back from injury can therefore be bought cheaply.
-- The exact formula is not published. Phase 6 works it out from price history.
+- The exact formula is not published, but the 2026-27 price history (rounds 1–14) fits
+  a simple rule almost exactly. It reproduces about 96% of next-round prices to the
+  cent, and the fit lives in `src/elfantasy/model/prices.py`:
+  - **Played:** change ≈ 0.040 × fantasy points (win bonus included) − 0.046 × price
+    + 0.04, rounded to 0.1. To keep his price, a player needs about
+    1.18 × price − 0.9 points, so a 15-credit player needs about 16.7.
+  - **Didn't play:** −0.1.
+  - **Floor:** prices never go below 4.0 (`rules.min_price`).
+  - **Coaches:** same idea with their own coefficients, driven by the result band.
 
 ## Postponed or moved games
 
@@ -102,7 +110,7 @@ Check these in the app, then update `rules.py`:
 - [x] Win bonus: a player on a winning team scores PIR + 10% of PIR (confirmed in the app).
 - [ ] How is the win bonus rounded? Phase 2 will work this out from real scores.
 - [ ] Does the 10% win bonus also apply to the coach? Probably not, since the coach has his own table.
-- [ ] The price change formula (Phase 6).
+- [x] The price change formula: fitted from price history (see Prices). It's linear in points and price, with a 4.0 floor and a −0.1 change for not playing.
 
 ## Sources
 

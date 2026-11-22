@@ -207,7 +207,7 @@ class LastFive(GreedyPicker):
 
 
 # Bump when features or model settings change, so cached models are retrained.
-MODEL_VERSION = 2
+MODEL_VERSION = 3
 
 
 class ModelV1(GreedyPicker):
@@ -277,7 +277,8 @@ class ModelV1(GreedyPicker):
             used = logs.player[logs.player["season"].isin(train)]
             key = f"{MODEL_VERSION}|{train}|{len(used)}|{used['fp'].sum():.2f}"
             digest = hashlib.sha1(key.encode()).hexdigest()[:12]
-            path = settings.models_dir / f"{self.name}_{season}_{digest}.pkl"
+            # One cache for every strategy built on these projections.
+            path = settings.models_dir / f"model_v1_{season}_{digest}.pkl"
             if path.exists():
                 self._models[season] = pickle.loads(path.read_bytes())
             else:
@@ -347,6 +348,7 @@ class ModelILP(ModelV1):
 
     name = "model_ilp"
     horizon = 3
+    value_weight = 0.0  # points per credit of expected price rise (Phase 6)
 
     def pick(self, ctx: RoundContext, projections: pd.Series) -> Lineup:
         from elfantasy.optimize import optimize
@@ -354,20 +356,47 @@ class ModelILP(ModelV1):
         logs = self._load()
         last = int(logs.schedule.loc[logs.schedule["season"] == ctx.season, "round"].max())
         rounds = list(range(ctx.round, min(ctx.round + self.horizon, last + 1)))
-        proj = pd.DataFrame(
-            {r: self._expected if r == ctx.round else self.predict(ctx, r)["expected"]
-             for r in rounds}
-        )  # fmt: skip
+        preds = {r: self._pred if r == ctx.round else self.predict(ctx, r) for r in rounds}
+        proj = pd.DataFrame({r: preds[r]["expected"] for r in rounds})
+        value = self._value(ctx, preds) if self.value_weight else None
         limits = [ctx.transfer_limit] + [
             ctx.rules.transfer_limit(after_round=r - 1) for r in rounds[1:]
         ]
         current = ctx.lineup.squad if ctx.lineup else None
-        plan = optimize(ctx.market, proj, ctx.rules, ctx.budget, current, limits)
+        plan = optimize(ctx.market, proj, ctx.rules, ctx.budget, current, limits,
+                        value=value, value_weight=self.value_weight)  # fmt: skip
         coach = next(p for p in plan.squads[0] if ctx.market.at[p, "position"] == COACH)
         players = tuple(sorted(plan.squads[0] - {coach}, key=str))
         return Lineup(
             players, coach, tuple(sorted(plan.starters[0], key=str)), plan.sixth[0],
             plan.captain[0],
+        )  # fmt: skip
+
+    def _value(self, ctx: RoundContext, preds: dict) -> pd.DataFrame | None:
+        """Expected price change per player for each horizon round, from a price
+        model fitted only on changes already published before this round."""
+        from elfantasy.model.prices import PriceModel, price_history
+
+        if getattr(self, "_prices", None) is None:
+            import duckdb
+
+            from elfantasy.config import settings
+
+            if self.con is not None:
+                self._prices = price_history(self.con, ctx.season)
+            else:
+                path = self.db_path or settings.db_path
+                with duckdb.connect(str(path), read_only=True) as con:
+                    self._prices = price_history(con, ctx.season)
+        model = PriceModel.fit(self._prices[self._prices["round"] < ctx.round], ctx.rules)
+        if model is None:
+            return None
+        m = ctx.market
+        is_coach = m["position"] == COACH
+        return pd.DataFrame(
+            {r: model.expected_change(m["price"], p["p_play"], p["mean"], is_coach)
+             for r, p in preds.items()},
+            index=m.index,
         )  # fmt: skip
 
 
@@ -413,6 +442,21 @@ class ModelILPAdjust(ModelTurns):
     simulate_start = False
 
 
+class ModelValue(ModelTurns):
+    """model_turns plus the Phase 6 value-growth term: the optimizer is paid
+    `value_weight` points per credit of expected price rise."""
+
+    name = "model_value"
+    value_weight = 5.0
+
+
+class ModelValue10(ModelValue):
+    name = "model_value10"
+    value_weight = 10.0
+
+
 STRATEGIES = {
-    s.name: s for s in (SeasonAverage, LastFive, ModelV1, ModelILP, ModelILPAdjust, ModelTurns)
-}
+    s.name: s
+    for s in (SeasonAverage, LastFive, ModelV1, ModelILP, ModelILPAdjust, ModelTurns,
+              ModelValue, ModelValue10)
+}  # fmt: skip
