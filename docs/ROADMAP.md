@@ -256,6 +256,38 @@ part of "done" can't be measured until rounds with logged news have been played.
 - Scheduled job: sync data, update projections, and send you a recommendation N hours before each deadline.
 - Optional: notify you on your phone or Telegram when there's late injury news.
 
+Decided (2026-11-22): automation first, then a FastAPI backend with a React + Vite
+frontend. Notifications are Windows desktop notifications.
+
+**Automation, done** (`src/elfantasy/automation.py`, `elf auto`, `elf schedule`):
+
+- `elf auto` is safe to run any time. Each run syncs this season's box scores, fantasy
+  prices and player links. Within 8 hours of a round's first game, it refreshes the
+  news, runs the optimizer and the turn-aware lineup, saves
+  `data/reports/auto_<season>_round_NN.md`, and pops up a notification (sell, buy,
+  captain, deadline). Between turns (after the last game of a turn, within 6 hours of
+  the next), it sends the lineup and captain changes for the next turn.
+- What has been sent is kept in `data/auto_state.json`, so nothing is sent twice. An
+  expired fantasy token triggers a notification, at most once a day. If another `elf`
+  command has the database open (DuckDB allows one writer), the run logs "busy" and
+  tries again next time. Everything goes to `data/logs/auto.log`.
+- `elf schedule install` registers a Windows scheduled task that runs `elf auto`
+  every 2 hours through `pythonw`, so no console window appears. `elf schedule status`
+  shows the next run and the log, and `elf schedule remove` deletes the task. The PC
+  has to be on and logged in for runs and notifications.
+- Settings now load `.env` by absolute path, because scheduled tasks start in another
+  folder.
+- Tested end to end on 2026-11-22. A forced pre-round run synced the data, saved the
+  round 14 report and showed the notification (sell, buy, captain Vezenkov, deadline Tue
+  24 Nov 19:00). The scheduled task ran under Task Scheduler and logged "nothing due".
+  It's installed to run every 2 hours.
+- Known limitation: news search coverage varies from run to run (50, 0 and 12 statuses
+  on three refreshes the same evening). A thin refresh doesn't erase earlier statuses,
+  because the log keeps each player's latest one, and news isn't applied to picks by
+  default.
+
+**Web app:** still to do.
+
 ## Phase 9: Live season loop (ongoing)
 
 - After every round, compare predictions with actual results, track calibration, and retrain.

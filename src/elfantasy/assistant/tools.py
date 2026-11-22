@@ -418,8 +418,14 @@ class Tools:
             .df()["home_name"]
             .tolist()
         )
-        statuses, _notes = news_mod.fetch(self.anthropic, c.season, c.round, teams,
-                                          str(sched[0]), str(sched[1]))  # fmt: skip
+        statuses, notes = news_mod.fetch(self.anthropic, c.season, c.round, teams,
+                                         str(sched[0]), str(sched[1]))  # fmt: skip
+        if not statuses:
+            summary = (
+                f"The news search found no player statuses this time "
+                f"({len(notes)} characters of notes). Logged news is unchanged."
+            )
+            return summary + "\n" + self.get_news({})
         matched = news_mod.match(statuses, c.market)
         news_mod.store(c.con, c.season, c.round, matched)
         unmatched = matched[matched["player_id"].isna()]["player_raw"].tolist()

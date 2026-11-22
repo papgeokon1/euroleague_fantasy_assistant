@@ -383,6 +383,96 @@ def turn(
             typer.echo(f"Captain: {names[advice.current.captain]} -> {names[advice.best.captain]}")
 
 
+TASK_NAME = "elfantasy-auto"
+
+
+@app.command()
+def auto(
+    force: str = typer.Option(
+        None, help="Run 'pre_round' or 'turn' now, ignoring the time windows."
+    ),
+    dry_run: bool = typer.Option(False, help="Sync and show what's due; send nothing."),
+) -> None:
+    """The scheduled pipeline: sync data, and before a round or between turns send the
+    recommendation as a desktop notification. Safe to run as often as you like."""
+    from datetime import datetime
+
+    from elfantasy.automation import run
+
+    if force not in (None, "pre_round", "turn"):
+        typer.echo("--force must be 'pre_round' or 'turn'.", err=True)
+        raise typer.Exit(1)
+    log_path = settings.data_dir / "logs" / "auto.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    def log(msg: str) -> None:
+        line = f"{datetime.now():%Y-%m-%d %H:%M:%S} {msg}"
+        typer.echo(line)
+        with log_path.open("a", encoding="utf-8") as f:
+            f.write(line + "\n")
+
+    try:
+        run(settings, RULES_2026_27, force=force, dry_run=dry_run, log=log)
+    except Exception as e:  # scheduled runs have no console: make failures visible
+        log(f"FAILED: {e!r}")
+        raise
+
+
+schedule_app = typer.Typer(help="Run `elf auto` on a Windows schedule.", no_args_is_help=True)
+app.add_typer(schedule_app, name="schedule")
+
+
+def _schtasks(*args: str):
+    import subprocess
+
+    return subprocess.run(["schtasks", *args], capture_output=True, text=True)
+
+
+@schedule_app.command("install")
+def schedule_install(
+    hours: int = typer.Option(2, min=1, max=12, help="Run every N hours."),
+) -> None:
+    """Create (or replace) a Windows scheduled task that runs `elf auto` every N hours
+    while you're logged in. Uses pythonw, so no console window pops up."""
+    import sys
+    from pathlib import Path
+
+    pythonw = Path(sys.executable).with_name("pythonw.exe")
+    if not pythonw.exists():
+        typer.echo(f"pythonw.exe not found next to {sys.executable}", err=True)
+        raise typer.Exit(1)
+    command = f'"{pythonw}" -m elfantasy.cli auto'
+    result = _schtasks("/Create", "/TN", TASK_NAME, "/SC", "HOURLY", "/MO", str(hours),
+                       "/TR", command, "/F")  # fmt: skip
+    typer.echo(result.stdout or result.stderr)
+    if result.returncode != 0:
+        raise typer.Exit(1)
+    typer.echo(f"Runs every {hours} h. Log: {settings.data_dir / 'logs' / 'auto.log'}")
+
+
+@schedule_app.command("remove")
+def schedule_remove() -> None:
+    """Delete the scheduled task."""
+    result = _schtasks("/Delete", "/TN", TASK_NAME, "/F")
+    typer.echo(result.stdout or result.stderr)
+
+
+@schedule_app.command("status")
+def schedule_status() -> None:
+    """Show the scheduled task (next and last run) and the end of the log."""
+    result = _schtasks("/Query", "/TN", TASK_NAME, "/V", "/FO", "LIST")
+    if result.returncode != 0:
+        typer.echo("Not installed. Run `elf schedule install`.")
+    else:
+        keep = ("TaskName", "Status", "Next Run Time", "Last Run Time", "Last Result",
+                "Task To Run", "Repeat: Every")  # fmt: skip
+        typer.echo("\n".join(ln for ln in result.stdout.splitlines() if ln.startswith(keep)))
+    log_path = settings.data_dir / "logs" / "auto.log"
+    if log_path.exists():
+        typer.echo("\nLast log lines:")
+        typer.echo("\n".join(log_path.read_text(encoding="utf-8").splitlines()[-8:]))
+
+
 def _assistant(con):
     """(context, tools, Anthropic client) for the chat, report and news commands."""
     import anthropic

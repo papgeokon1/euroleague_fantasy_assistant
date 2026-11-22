@@ -141,7 +141,9 @@ def match(statuses: list[PlayerStatus], market: pd.DataFrame) -> pd.DataFrame:
                 "reason": s.reason, "source": s.source,
             }
         )  # fmt: skip
-    return pd.DataFrame(rows)
+    columns = ["player_id", "match_score", "player_raw", "team_raw", "status", "reason",
+               "source"]  # fmt: skip
+    return pd.DataFrame(rows, columns=columns)  # columns even when nothing was found
 
 
 def store(con: duckdb.DuckDBPyConnection, season: str, round_: int, matched: pd.DataFrame):

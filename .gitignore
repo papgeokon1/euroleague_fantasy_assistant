@@ -18,6 +18,10 @@ data/raw/*
 data/processed/*
 models/*
 data/*.log
+# Personal output of the assistant and the scheduled job
+data/reports/
+data/logs/
+data/auto_state.json
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 !models/.gitkeep

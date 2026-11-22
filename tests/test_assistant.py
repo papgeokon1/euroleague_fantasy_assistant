@@ -203,3 +203,8 @@ def test_assistant_reports_tool_errors_to_claude(tools):
     bot = Assistant(tools, client)
     bot.ask("show my team")
     assert bot.messages[2]["content"][0]["is_error"] is True
+
+
+def test_news_match_with_no_statuses_keeps_columns(ctx):
+    matched = news.match([], ctx.market)
+    assert matched.empty and "player_id" in matched.columns
