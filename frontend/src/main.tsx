@@ -8,6 +8,7 @@ import Chat from './pages/Chat'
 import Compare from './pages/Compare'
 import Dashboard from './pages/Dashboard'
 import Optimize from './pages/Optimize'
+import Season from './pages/Season'
 
 // Projections only change when the data syncs, so cached answers stay good for minutes.
 const queryClient = new QueryClient({
@@ -23,6 +24,7 @@ createRoot(document.getElementById('root')!).render(
             <Route index element={<Dashboard />} />
             <Route path="optimize" element={<Optimize />} />
             <Route path="compare" element={<Compare />} />
+            <Route path="season" element={<Season />} />
             <Route path="chat" element={<Chat />} />
           </Route>
         </Routes>

@@ -232,3 +232,23 @@ def schedule(ctx: FantasyContext, round_: int | None = None) -> list[dict]:
         [ctx.season, round_ or ctx.round],
     ).df()
     return records(g)
+
+
+def season_review(ctx: FantasyContext) -> dict:
+    """The season trend from the round reviews, plus the latest review in full."""
+    import json as _json
+
+    from elfantasy.review import season_summary
+
+    summary = season_summary(ctx.con, ctx.season)
+    latest = None
+    if not summary.empty:
+        raw = ctx.con.execute(
+            "SELECT review FROM round_reviews WHERE season = ? ORDER BY round DESC LIMIT 1",
+            [ctx.season],
+        ).fetchone()
+        latest = _json.loads(raw[0])
+        names = {pid: ctx.name(pid) for pid in ctx.market.index}
+        for s in latest.get("surprises", []):
+            s["name"] = names.get(s["player_id"], str(s["player_id"]))
+    return {"rounds": records(summary), "latest": latest}

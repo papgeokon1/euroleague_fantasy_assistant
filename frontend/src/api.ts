@@ -114,6 +114,33 @@ export interface NewsItem extends News {
   team: string
 }
 
+export interface ReviewRound {
+  round: number
+  source: 'live' | 'reconstructed' | null
+  mae: number | null
+  bias: number | null
+  within_10_90: number | null
+  you: number | null
+  you_projected: number | null
+  recommended: number | null
+  top10_avg: number | null
+  top1: number | null
+}
+
+export interface SeasonReview {
+  rounds: ReviewRound[]
+  latest: {
+    round: number
+    prediction_source?: string
+    your_points?: number
+    your_projected?: number
+    recommended_points?: number
+    benchmark?: { top1: number; top10_avg: number; top25_avg: number }
+    accuracy?: { players: number; mae: number; bias: number; within_10_90: number; below_10: number; above_90: number; p_play_predicted: number; p_play_actual: number }
+    surprises?: { player_id: number; name: string; slot: string; expected: number; points: number | null }[]
+  } | null
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     ...init,
@@ -143,6 +170,7 @@ export const api = {
   compare: (ids: number[]) =>
     request<ComparedPlayer[]>('/api/compare', { method: 'POST', body: JSON.stringify({ ids }) }),
   news: () => request<NewsItem[]>('/api/news'),
+  review: () => request<SeasonReview>('/api/review'),
   optimize: (opts: OptimizeOptions) =>
     request<{ job_id: string }>('/api/optimize', { method: 'POST', body: JSON.stringify(opts) }),
   job: <T>(id: string) => request<Job<T>>(`/api/jobs/${id}`),

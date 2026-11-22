@@ -137,6 +137,8 @@ def run(
             "SELECT max(round) FROM fantasy_prices WHERE season = ? AND live", [season]
         ).fetchone()[0])  # fmt: skip
         turns = round_turns(con, season, rnd)
+        if not dry_run:
+            done += _post_round(con, fantasy, settings, rules, rnd, state, now, log, notify)
         actions = due_actions(now, season, rnd, turns, {} if force else state)
         if force:
             actions = [a for a in actions if a[1] == force] or [
@@ -190,6 +192,37 @@ def _sync(con, fantasy, settings, now, state, log, notify, dry_run) -> bool:
     return True
 
 
+def _post_round(con, fantasy, settings, rules, rnd, state, now, log, notify) -> list[str]:
+    """Review rounds whose box scores are complete and haven't been reviewed yet."""
+    from elfantasy.review import _exists, headline, round_played, run_review
+
+    done = []
+    season = settings.season_code
+    for r in (rnd - 1, rnd):
+        key = f"{season}-{r}-review"
+        if r < 1 or key in state or not round_played(con, season, r):
+            continue
+        reviewed = (
+            _exists(con, "round_reviews")
+            and con.execute(
+                "SELECT count(*) FROM round_reviews WHERE season = ? AND round = ?", [season, r]
+            ).fetchone()[0]
+        )
+        if reviewed:  # e.g. backfilled by `elf review`: nothing new to say
+            state[key] = now.isoformat(timespec="seconds")
+            continue
+        try:
+            line = headline(run_review(con, fantasy, season, r, rules, log=log))
+        except Exception as e:  # the review must never stop the sync or the plan
+            log(f"Round {r} review failed: {e}")
+            continue
+        log(line)
+        notify(f"Round {r} review", line)
+        state[key] = now.isoformat(timespec="seconds")
+        done.append(key)
+    return done
+
+
 def _token_alert(state, now, notify, log, message) -> None:
     log(message)
     last = state.get("token_alert")
@@ -232,6 +265,14 @@ def _pre_round(con, fantasy, settings, rules, rnd, turns, log) -> tuple[str, str
     baseline = {p["id"] for p in fantasy.roster(team, prev["id"])["players"]} if prev else None
     rec = recommend(con, settings.season_code, rnd, rules, budget, baseline, model=ctx.model)
     advice = turn_advice(roster, ctx.market, ctx.predictions(), rules)
+
+    # Phase 9: keep what we predicted and recommended, to review after the round.
+    from elfantasy.backtest.strategies import MODEL_VERSION
+    from elfantasy.review import log_predictions, log_recommendation
+
+    log_predictions(con, settings.season_code, rnd, ctx.market, ctx.predictions(), "live",
+                    f"model_v1:{MODEL_VERSION}")  # fmt: skip
+    log_recommendation(con, settings.season_code, rnd, rec.table, budget)
 
     names = {pid: ctx.name(pid) for pid in ctx.market.index}
     sell = sorted(names.get(i, str(i)) for i in live - rec.plan.squads[0])

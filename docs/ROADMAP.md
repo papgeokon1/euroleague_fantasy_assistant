@@ -313,6 +313,36 @@ frontend. Notifications are Windows desktop notifications.
 - Keep a log of every decision with the projected and actual points, to learn where the model goes wrong.
 - Compare our score each round with the top managers' scores.
 
+Status (2026-11-22): the loop is built (`src/elfantasy/review.py`, `elf review`, the
+Season page). The in-season retraining test is still running.
+
+- **Logs** (DuckDB tables, appended): `prediction_log` (projections as used, `live`
+  from `elf auto` before each round, or `reconstructed` leak-free for past rounds),
+  `recommendation_log` (the optimizer's lineup), `manager_rounds` and
+  `manager_rosters` (your score and final lineup, from the game API), and
+  `benchmark_rounds` (top-1, top-10 and top-25 round scores from the Global league:
+  aggregates only, no names).
+- **Review** per played round: projection error and bias; calibration (share inside the
+  10–90% range, plus below and above it); chance-of-playing calibration; your score
+  against the model's expectation for your lineup; what the recommended plan would
+  have scored; the benchmark; your biggest surprises. Stored in `round_reviews`.
+  `elf auto` reviews each round once its box scores are complete and sends a
+  notification.
+- **Backfill of rounds 1–13**, with reconstructed predictions:
+
+  | | Rounds 1–13 |
+  |---|---|
+  | Projection error (MAE) | 5.6–6.4 |
+  | Results inside the 10–90% range | 78% on average (74–76% in recent rounds) |
+  | Your score | 157.6 per round |
+  | Model's expectation for your final lineups | 124.6 |
+  | Top-10 managers of each round | about 235 |
+  | Season leader | about 186 per round |
+
+  The ranges are slightly too narrow and getting narrower. Your lineups outscore the
+  model's expectation for them by about 33 points a round. Part of that is in-round
+  changes made after early scores are known, so it's worth a look in Phase 10.
+
 ## Phase 10: Team quality (after Phase 9)
 
 The user isn't happy with the squads the optimizer suggests so far, even though the

@@ -92,6 +92,11 @@ def create_app(settings=None, rules=RULES_2026_27, frontend_dist: Path = FRONTEN
         with state.session() as ctx:
             return service.news(ctx)
 
+    @app.get("/api/review")
+    def get_review():
+        with state.session() as ctx:
+            return service.season_review(ctx)
+
     @app.get("/api/schedule")
     def get_schedule(round: int | None = None):  # noqa: A002 (query parameter name)
         with state.session() as ctx:

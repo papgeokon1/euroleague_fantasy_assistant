@@ -396,6 +396,43 @@ def serve(
                 reload=reload)  # fmt: skip
 
 
+@app.command()
+def review(
+    round_: int = typer.Option(None, "--round", help="Round to review (default: latest played)."),
+    backfill: bool = typer.Option(False, help="Review every played round this season."),
+) -> None:
+    """Review played rounds: projection error and calibration, your score against the
+    projection, the recommended plan and the top managers. Stored for the season trend."""
+    import pandas as pd
+
+    from elfantasy.backtest.strategies import ModelV1
+    from elfantasy.data.fantasy import FantasyClient
+    from elfantasy.data.store import connect
+    from elfantasy.review import headline, round_played, run_review, season_summary
+
+    if settings.fantasy_token is None:
+        typer.echo("ELF_FANTASY_TOKEN is not set in .env.", err=True)
+        raise typer.Exit(1)
+    season = settings.season_code
+    fantasy = FantasyClient(settings.raw_dir, settings.fantasy_token.get_secret_value(),
+                            league_id=settings.fantasy_league_id)  # fmt: skip
+    with fantasy, connect(settings.db_path) as con:
+        played = [r for r in range(1, 41) if round_played(con, season, r)]
+        if not played:
+            typer.echo("No played rounds with box scores yet.")
+            return
+        targets = played if backfill else [round_ or played[-1]]
+        model = ModelV1(con=con)
+        for r in targets:
+            typer.echo(headline(run_review(con, fantasy, season, r, RULES_2026_27,
+                                           log=typer.echo, model=model)))  # fmt: skip
+        summary = season_summary(con, season)
+    if not summary.empty:
+        with pd.option_context("display.float_format", "{:.2f}".format):
+            typer.echo("\nSeason so far:")
+            typer.echo(summary.to_string(index=False))
+
+
 TASK_NAME = "elfantasy-auto"
 
 

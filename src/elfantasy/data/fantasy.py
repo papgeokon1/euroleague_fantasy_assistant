@@ -141,6 +141,16 @@ class FantasyClient:
         6 sixth man, 7-10 bench, 11 coach) and is_captain."""
         return self._get(f"/fantasy-teams/{team_id}/matchdays/{matchday_id}/roster")["data"]
 
+    def tournaments(self, team_id: int) -> list[dict]:
+        """Leagues a team plays in (the public 'Global' one included)."""
+        return self._get(f"/fantasy-teams/{team_id}/tournaments")["data"]
+
+    def standings(self, tournament_id: int, matchday_id: int | None = None) -> list[dict]:
+        """Top of a league's table (first page, 25 teams). With matchday_id: that
+        round's ranking, with each team's matchday_pts."""
+        params = {"matchday": matchday_id} if matchday_id else None
+        return self._get(f"/tournaments/{tournament_id}/standings", params=params)["data"]
+
     @staticmethod
     def _write(path: Path, data: object) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
