@@ -314,7 +314,8 @@ frontend. Notifications are Windows desktop notifications.
 - Compare our score each round with the top managers' scores.
 
 Status (2026-11-22): the loop is built (`src/elfantasy/review.py`, `elf review`, the
-Season page). The in-season retraining test is still running.
+Season page). In-season retraining was tested and doesn't ship (see the end of this
+section).
 
 - **Logs** (DuckDB tables, appended): `prediction_log` (projections as used, `live`
   from `elf auto` before each round, or `reconstructed` leak-free for past rounds),
@@ -342,6 +343,21 @@ Season page). The in-season retraining test is still running.
   The ranges are slightly too narrow and getting narrower. Your lineups outscore the
   model's expectation for them by about 33 points a round. Part of that is in-round
   changes made after early scores are known, so it's worth a look in Phase 10.
+- **In-season retraining:** tested and **not shipped**. Retraining with the current
+  season's completed rounds (leak-free: only rounds before each block) gave the same
+  error as the model trained on earlier seasons:
+
+  | Weighted MAE | Current model | Retrained in season |
+  |---|---|---|
+  | 2025-26, 4 blocks | **5.867** | 5.869 |
+  | 2026-27, rounds 7–13 | 6.140 | **6.128** |
+
+  The differences are noise, in opposite directions. The features already carry this
+  season's information (form, season averages, games missed), so the model weights
+  don't need weekly updates. Retraining between seasons is still needed and happens
+  automatically, because the model cache key changes when a new season's data arrives.
+  The calibration drift (ranges too narrow) is the more useful target; recalibration
+  belongs in Phase 10.
 
 ## Phase 10: Team quality (after Phase 9)
 
