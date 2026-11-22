@@ -26,6 +26,9 @@ PARAMS = dict(
     subsample_freq=1,
     colsample_bytree=0.8,
     verbose=-1,
+    random_state=0,  # same data -> same model, so backtests are reproducible
+    deterministic=True,
+    force_row_wise=True,
 )
 
 

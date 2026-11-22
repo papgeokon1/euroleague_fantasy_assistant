@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     fantasy_token: SecretStr | None = None
     fantasy_league_id: int = 10  # 10 = EuroLeague, 11 = EuroCup
 
+    models_dir: Path = PROJECT_ROOT / "models"
+
     @property
     def raw_dir(self) -> Path:
         return self.data_dir / "raw"

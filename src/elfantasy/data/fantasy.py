@@ -125,6 +125,22 @@ class FantasyClient:
         self._write(path, snapshot)
         return snapshot
 
+    def my_teams(self) -> list[dict]:
+        """The logged-in user's classic-mode teams in this league."""
+        return self._get("/user/fantasy-teams", params={"league": self.league_id, "game_mode": 1})[
+            "data"
+        ]
+
+    def team_round(self, team_id: int, matchday_id: int) -> dict:
+        """A team's state for a matchday: `credits` (total budget incl. bank),
+        `trades` used and `max_num_trades_per_matchday`."""
+        return self._get(f"/fantasy-teams/{team_id}/matchdays/{matchday_id}")["data"]
+
+    def roster(self, team_id: int, matchday_id: int) -> dict:
+        """A team's roster for a matchday: players with court_position (1-5 starters,
+        6 sixth man, 7-10 bench, 11 coach) and is_captain."""
+        return self._get(f"/fantasy-teams/{team_id}/matchdays/{matchday_id}/roster")["data"]
+
     @staticmethod
     def _write(path: Path, data: object) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)

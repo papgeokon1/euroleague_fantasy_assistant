@@ -93,8 +93,8 @@ is predicted by a model trained only on earlier seasons.
 |---|---|---|---|
 | MAE 2024-25 (held out) | 5.95 | 6.10 | **5.79** |
 | MAE 2025-26 (held out) | 6.11 | 6.29 | **5.90** |
-| MAE 2026-27 | 6.41 | 6.38 | **5.96** |
-| Season points 2026-27, rounds 1–13 | 1137 | 1352 | **1722** |
+| MAE 2026-27 | 6.41 | 6.38 | **5.97** |
+| Season points 2026-27, rounds 1–13 | 1137 | 1352 | **1623** |
 
 Known gaps for v2: the game model (weighted margin plus home advantage) predicts
 winners no better than "the home team wins". The 10th–90th percentile range covers
@@ -120,6 +120,59 @@ Pick the squad as an integer linear program using PuLP or OR-Tools, the same app
 - `elf turn` recommends what to change after each turn.
 
 **Done when:** the backtested season score clearly beats the Phase 3 baselines, the turn strategy adds measurable points on top, and it runs fast enough to use before every deadline.
+
+Status (2026-11-22): the optimizer and 5b are both done. Optimizer: `src/elfantasy/optimize.py`.
+It's an integer program solved with HiGHS. CBC, which the roadmap first named, no
+longer ships with PuLP 4. It plans squad, starters, sixth man, captain and transfers
+over the next 3 rounds, with later rounds weighted ×0.85 and prices held at today's
+values. Players who can't plausibly make the squad are dropped before solving: this
+gave the same answers 2–4× faster.
+
+| 2026-27, rounds 1–13 | Season points | Per round |
+|---|---|---|
+| `last5` (best baseline) | 1352 | 104.0 |
+| `model_v1` (greedy picker) | 1623 | 124.9 |
+| `model_ilp` (optimizer) | **1896** | **145.9** |
+
+`elf optimize` gives the live recommendation for the coming round: it fetches your
+squad and budget, plans 3 rounds ahead, and prints transfers, lineup, captain and each
+player's range. It takes about a minute once the model is cached in `models/`. The
+game's injury flag for the current round is used live only (`--no-injuries` turns it
+off), because there's no injury history to backtest it against.
+
+LightGBM now uses a fixed seed. Before that, small run-to-run changes in projections
+sent the optimizer down different transfer paths, and season scores moved by up to
+about 10%. Read differences between strategies smaller than that with care, since
+13 rounds is still a small sample.
+
+**5b, the turn strategy** (`src/elfantasy/turns.py`): a 10-player squad has 4,600 legal
+lineups (formation × starters × sixth man × captain), held as arrays. After each turn
+the lineup is re-optimised: players who already played count their actual points, the
+rest their expected points, and the turn rules limit which lineups are reachable. The
+starting lineup is chosen by simulating the round 300 times with that policy in play.
+This puts the option value into the starting lineup, for example a captain who plays
+in turn 1 and so can still be replaced.
+
+Measured with `elf backtest-turns` on 2024-25 and 2025-26 (72 rounds × 20 squads; each
+policy gets the same squads and actual results; gain over a fixed lineup):
+
+| Policy | Points per round | 95% interval | Rounds better |
+|---|---|---|---|
+| Changes between turns only | +3.4 | 2.9 to 3.9 | 97% |
+| Simulated starting lineup only | −0.7 | −1.1 to −0.4 | 31% |
+| **Both** (`model_turns`, `elf turn`) | **+4.8** | 4.3 to 5.4 | 100% |
+
+That's about +180 points over a season. A single season simulation (`model_turns`
+against `model_ilp` on 2026-27) can't show this, because small changes upstream move the
+season total by ±60 points.
+
+`elf turn` reads the live roster. Before the round it suggests the starting lineup and
+captain. After a turn it suggests the swaps and captain move. `elf optimize` also picks
+its starting lineup this way now.
+
+Not modelled: with 3 turns the policy decides greedily at each turn boundary (exactly
+optimal with 2 turns). Players' scores are simulated independently, so teammates and
+opponents aren't correlated.
 
 ## Phase 6: Price and team-value model (1 week)
 

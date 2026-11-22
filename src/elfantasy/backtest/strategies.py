@@ -206,6 +206,10 @@ class LastFive(GreedyPicker):
         return players.where(m["position"] != COACH, coaches).fillna(0.0)
 
 
+# Bump when features or model settings change, so cached models are retrained.
+MODEL_VERSION = 2
+
+
 class ModelV1(GreedyPicker):
     """Phase 4 projections: LightGBM play probability and points-if-he-plays, plus the
     game model for coaches.
@@ -220,8 +224,11 @@ class ModelV1(GreedyPicker):
 
     name = "model_v1"
 
-    def __init__(self, db_path=None):
+    def __init__(self, db_path=None, con=None):
+        """Reads the database at `db_path` (default: settings), or through an
+        already-open connection `con`."""
         self.db_path = db_path
+        self.con = con
         self._logs = None
         self._features = None
         self._models: dict[str, tuple] = {}
@@ -232,35 +239,64 @@ class ModelV1(GreedyPicker):
             import duckdb
 
             from elfantasy.config import settings
-            from elfantasy.model.features import Logs, build_features, training_targets
+            from elfantasy.model.features import Logs
 
-            path = self.db_path or settings.db_path
-            with duckdb.connect(str(path), read_only=True) as con:
-                self._logs = Logs.load(con)
-            seasons = sorted(self._logs.player["season"].unique())
-            self._features = build_features(self._logs, training_targets(self._logs, seasons))
+            if self.con is not None:
+                self._logs = Logs.load(self.con)
+            else:
+                path = self.db_path or settings.db_path
+                with duckdb.connect(str(path), read_only=True) as con:
+                    self._logs = Logs.load(con)
         return self._logs
 
+    def _training_features(self) -> pd.DataFrame:
+        if self._features is None:
+            from elfantasy.model.features import build_features, training_targets
+
+            logs = self._load()
+            seasons = sorted(logs.player["season"].unique())
+            self._features = build_features(logs, training_targets(logs, seasons))
+        return self._features
+
     def _fit(self, season: str):
+        """Models for `season`, trained on all earlier seasons. Cached in models/,
+        keyed by the training data, so a later run with the same data skips training."""
         if season not in self._models:
+            import hashlib
+            import pickle
+
+            from elfantasy.config import settings
             from elfantasy.model.features import team_game_features
             from elfantasy.model.game import GameModel
             from elfantasy.model.projection import ProjectionModel
 
             logs = self._load()
-            train = tuple(s for s in sorted(self._features["season"].unique()) if s < season)
+            train = tuple(s for s in sorted(logs.player["season"].unique()) if s < season)
             if not train:
                 raise ValueError(f"no seasons before {season} to train on")
-            games = team_game_features(logs)
-            self._models[season] = (
-                ProjectionModel.fit(self._features, train),
-                GameModel.fit(games[games["season"].isin(train)]),
-            )
+            used = logs.player[logs.player["season"].isin(train)]
+            key = f"{MODEL_VERSION}|{train}|{len(used)}|{used['fp'].sum():.2f}"
+            digest = hashlib.sha1(key.encode()).hexdigest()[:12]
+            path = settings.models_dir / f"{self.name}_{season}_{digest}.pkl"
+            if path.exists():
+                self._models[season] = pickle.loads(path.read_bytes())
+            else:
+                games = team_game_features(logs)
+                self._models[season] = (
+                    ProjectionModel.fit(self._training_features(), train),
+                    GameModel.fit(games[games["season"].isin(train)]),
+                )
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(pickle.dumps(self._models[season]))
         return self._models[season]
 
-    def predict(self, ctx: RoundContext) -> pd.DataFrame:
+    def predict(self, ctx: RoundContext, target_round: int | None = None) -> pd.DataFrame:
         """Per market player: p_play, mean, q10, q50, q90, expected (coaches: expected
-        coach points in `expected` and `q50`)."""
+        coach points in `expected` and `q50`).
+
+        `target_round` projects a later round using only what is known before
+        ctx.round's deadline (that round's matchups come from the schedule)."""
+        target = ctx.round if target_round is None else target_round
         from elfantasy.model.features import build_features
 
         logs = self._load()
@@ -272,8 +308,8 @@ class ModelV1(GreedyPicker):
         known = m[~is_coach & m["el_code"].notna()]
         if len(known):
             targets = pd.DataFrame(
-                {"season": ctx.season, "round": ctx.round, "el_code": known["el_code"].to_numpy(),
-                 "team_code": known["el_team"].to_numpy()}
+                {"season": ctx.season, "round": target, "as_of_round": ctx.round,
+                 "el_code": known["el_code"].to_numpy(), "team_code": known["el_team"].to_numpy()}
             )  # fmt: skip
             pred = players.predict(build_features(logs, targets))
             pred.index = known.index
@@ -282,19 +318,21 @@ class ModelV1(GreedyPicker):
         coaches = m[is_coach]
         if len(coaches):
             targets = pd.DataFrame(
-                {"season": ctx.season, "round": ctx.round, "el_code": "__coach__",
-                 "team_code": coaches["el_team"].to_numpy()}
+                {"season": ctx.season, "round": target, "as_of_round": ctx.round,
+                 "el_code": "__coach__", "team_code": coaches["el_team"].to_numpy()}
             )  # fmt: skip
             x = build_features(logs, targets)
             pts = games.coach_points(x["team_str"], x["opp_str"], x["home"].fillna(0.5), ctx.rules)
             out.loc[coaches.index, ["p_play", "mean", "q50"]] = np.column_stack(
                 [np.ones(len(pts)), pts, pts]
             )
+            out.loc[coaches.index, ["q10", "q90"]] = np.nan  # only the mean is modelled
         out["expected"] = out["p_play"] * out["mean"]
         return out
 
     def project(self, ctx: RoundContext) -> pd.Series:
         pred = self.predict(ctx)
+        self._pred = pred
         self._expected = pred["expected"]
         return pred["q50"]
 
@@ -303,4 +341,78 @@ class ModelV1(GreedyPicker):
         return super().pick(ctx, self._expected.reindex(ctx.market.index).fillna(0.0))
 
 
-STRATEGIES = {s.name: s for s in (SeasonAverage, LastFive, ModelV1)}
+class ModelILP(ModelV1):
+    """model_v1 projections, picked by the integer-programming optimizer over the
+    next `horizon` rounds instead of the greedy one-round picker."""
+
+    name = "model_ilp"
+    horizon = 3
+
+    def pick(self, ctx: RoundContext, projections: pd.Series) -> Lineup:
+        from elfantasy.optimize import optimize
+
+        logs = self._load()
+        last = int(logs.schedule.loc[logs.schedule["season"] == ctx.season, "round"].max())
+        rounds = list(range(ctx.round, min(ctx.round + self.horizon, last + 1)))
+        proj = pd.DataFrame(
+            {r: self._expected if r == ctx.round else self.predict(ctx, r)["expected"]
+             for r in rounds}
+        )  # fmt: skip
+        limits = [ctx.transfer_limit] + [
+            ctx.rules.transfer_limit(after_round=r - 1) for r in rounds[1:]
+        ]
+        current = ctx.lineup.squad if ctx.lineup else None
+        plan = optimize(ctx.market, proj, ctx.rules, ctx.budget, current, limits)
+        coach = next(p for p in plan.squads[0] if ctx.market.at[p, "position"] == COACH)
+        players = tuple(sorted(plan.squads[0] - {coach}, key=str))
+        return Lineup(
+            players, coach, tuple(sorted(plan.starters[0], key=str)), plan.sixth[0],
+            plan.captain[0],
+        )  # fmt: skip
+
+
+class ModelTurns(ModelILP):
+    """model_ilp plus the Phase 5b turn strategy: the starting lineup is chosen by
+    simulating the round with in-round changes in play, and after each turn the
+    lineup and captain are re-optimised with the scores known so far."""
+
+    name = "model_turns"
+    simulate_start = True
+
+    def pick(self, ctx: RoundContext, projections: pd.Series) -> Lineup:
+        from elfantasy.turns import LineupSpace, best_start
+
+        lineup = super().pick(ctx, projections)
+        self._space = LineupSpace(list(lineup.players), ctx.market["position"].to_dict(), ctx.rules)
+        if not self.simulate_start:
+            return lineup
+        idx, _, _ = best_start(self._space, self._pred, ctx.market["turn"].to_dict())
+        c = self._space.choice(idx)
+        return Lineup(lineup.players, lineup.coach, c.starters, c.sixth, c.captain)
+
+    def adjust(self, t) -> Lineup | None:
+        from elfantasy.turns import Choice
+
+        space = self._space
+        players = space.players
+        played = np.array([p in t.played for p in players])
+        known = t.points.reindex(players).fillna(0.0).to_numpy(dtype=float)
+        expected = self._expected.reindex(players).fillna(0.0).to_numpy(dtype=float)
+        current = space.index(Choice(t.lineup.starters, t.lineup.sixth, t.lineup.captain))
+        best = space.best(current, played, np.where(played, known, expected))
+        if best == current:
+            return None
+        c = space.choice(best)
+        return Lineup(t.lineup.players, t.lineup.coach, c.starters, c.sixth, c.captain)
+
+
+class ModelILPAdjust(ModelTurns):
+    """model_ilp's starting lineup, with only the between-turn changes added."""
+
+    name = "model_ilp_adjust"
+    simulate_start = False
+
+
+STRATEGIES = {
+    s.name: s for s in (SeasonAverage, LastFive, ModelV1, ModelILP, ModelILPAdjust, ModelTurns)
+}

@@ -188,8 +188,20 @@ def _team_games_before(logs: Logs, season: pd.Series, team: pd.Series, t: pd.Ser
 
 def build_features(logs: Logs, targets: pd.DataFrame) -> pd.DataFrame:
     """Features for target rows with columns season, round, el_code, team_code
-    (EuroLeague codes). Rounds are regular-season rounds."""
-    x = targets.reset_index(drop=True).merge(logs.deadlines, on=["season", "round"], how="left")
+    (EuroLeague codes). Rounds are regular-season rounds.
+
+    An optional `as_of_round` column projects a later round from an earlier point in
+    time: player and team state come from before `as_of_round`'s deadline, while the
+    matchup (opponent, home, rest) is the target round's, from the published schedule.
+    """
+    x = targets.reset_index(drop=True)
+    if "as_of_round" not in x:
+        x["as_of_round"] = x["round"]
+    x = x.merge(
+        logs.deadlines.rename(columns={"round": "as_of_round"}),
+        on=["season", "as_of_round"],
+        how="left",
+    )
     game = logs.schedule[["season", "round", "team_code", "t", "home", "opp_code"]]
     x = x.merge(game.rename(columns={"t": "game_t"}), on=["season", "round", "team_code"],
                 how="left")  # fmt: skip

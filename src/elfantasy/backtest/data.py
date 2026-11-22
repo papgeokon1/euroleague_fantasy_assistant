@@ -22,8 +22,9 @@ class SeasonData:
     season: str
     rounds: list[int]
     # One row per buyable player per round: round, player_id, el_code, el_team,
-    # position (G/F/C/HC), team_code, price. Price is NaN when the season has no
-    # fantasy prices, which limits the backtest to projection error.
+    # position (G/F/C/HC), team_code, price, turn (which turn of the round he plays
+    # in). Price is NaN when the season has no fantasy prices, which limits the
+    # backtest to projection error.
     market: pd.DataFrame
     # round, player_id, points (fantasy points before slot multipliers), seconds
     outcomes: pd.DataFrame
@@ -86,7 +87,7 @@ def load_season(con: duckdb.DuckDBPyConnection, season: str) -> SeasonData:
 def _fantasy_market(con: duckdb.DuckDBPyConnection, season: str) -> pd.DataFrame:
     market = con.execute(
         """
-        SELECT f.round, f.player_id, f.position, f.team_code, f.price,
+        SELECT f.round, f.player_id, f.position, f.team_code, f.price, f.turn,
                m.el_code
         FROM fantasy_prices f
         LEFT JOIN player_map m
@@ -121,6 +122,7 @@ def _market_from_box_scores(con: duckdb.DuckDBPyConnection, season: str) -> pd.D
     ).df()
     market = pd.concat([players, coaches], ignore_index=True)
     market["price"] = float("nan")
+    market["turn"] = 1  # no turn data without the fantasy schedule
     return market
 
 

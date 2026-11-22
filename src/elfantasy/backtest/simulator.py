@@ -132,6 +132,34 @@ def validate(lineup: Lineup, ctx: RoundContext) -> float:
     return cost
 
 
+@dataclass
+class TurnContext:
+    """What a manager knows after turn `turn` of a round has been played."""
+
+    round: int
+    turn: int
+    lineup: Lineup  # the lineup going into the next turn
+    played: set  # squad players whose game is over (they can't move up)
+    points: pd.Series  # actual fantasy points of the players in `played`
+    market: pd.DataFrame
+    rules: GameRules
+
+
+def validate_turn(old: Lineup, new: Lineup, played: set) -> None:
+    """Raise RuleViolation if `new` isn't a legal change from `old` between turns."""
+    if new.squad != old.squad:
+        raise RuleViolation("no transfers during a round")
+
+    def slot(lu: Lineup, p) -> str:
+        return "starter" if p in lu.starters else "sixth" if p == lu.sixth else "bench"
+
+    for p in played:
+        if slot(new, p) != "bench" and slot(new, p) != slot(old, p):
+            raise RuleViolation(f"{p} already played and can't move into the lineup")
+    if new.captain != old.captain and new.captain in played:
+        raise RuleViolation(f"{new.captain} already played and can't become captain")
+
+
 def score(lineup: Lineup, points: pd.Series, rules: GameRules) -> float:
     """Round score from actual fantasy points per player_id."""
     total = 0.0
@@ -199,13 +227,32 @@ def run_season(
         lineup, bank = new, budget - cost
         last_price.update(market["price"].to_dict())
 
+        # Changes between turns, for strategies that make them.
+        start = lineup
+        changes = 0
+        if hasattr(strategy, "adjust") and "turn" in market:
+            turns = market["turn"]
+            for k in sorted(turns.loc[list(lineup.players)].unique())[:-1]:
+                played = {p for p in lineup.players if turns[p] <= k}
+                known = outcome["points"].reindex(list(played))
+                tctx = TurnContext(rnd, int(k), lineup, played, known, market, rules)
+                adjusted = strategy.adjust(tctx)
+                if adjusted is not None and adjusted != lineup:
+                    validate_turn(lineup, adjusted, played)
+                    validate(adjusted, ctx)
+                    changes += 1
+                    lineup = adjusted
+
         played = projection_rows[-1]
         played = played[(played["seconds"] > 0) & (played["position"] != COACH)]
+        points = score(lineup, outcome["points"], rules)
         round_rows.append(
             {
                 "round": rnd,
-                "points": score(lineup, outcome["points"], rules),
-                "projected": score(lineup, proj, rules),
+                "points": points,
+                "projected": score(start, proj, rules),
+                "turn_gain": points - score(start, outcome["points"], rules),
+                "turn_changes": changes,
                 "transfers": transfers,
                 "transfer_limit": "unlimited" if limit is None else limit,
                 "team_value": budget,
