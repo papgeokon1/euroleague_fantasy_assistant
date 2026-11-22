@@ -286,7 +286,26 @@ frontend. Notifications are Windows desktop notifications.
   because the log keeps each player's latest one, and news isn't applied to picks by
   default.
 
-**Web app:** still to do.
+**Web app, done** (`src/elfantasy/api/` + `frontend/`, run with `elf serve`):
+
+- **Structure:** the Python package stays the core. `elfantasy.api` is a thin FastAPI
+  layer over it (installed with the `api` extra). `frontend/` is React + Vite +
+  TypeScript with React Router, TanStack Query, Tailwind and react-markdown.
+- **Pages:**
+  - **My team:** the live squad with projections, ranges, news and turn advice,
+    changes highlighted.
+  - **Optimize:** the optimizer runs as a background job. Options: horizon, players
+    to sell, from scratch, apply news.
+  - **Compare:** up to 6 players, covering the next 3 rounds, break-even price and
+    chance of a price rise, plus a top-projections browser.
+  - **Chat:** the assistant. Tool calls stream as server-sent events while it works.
+- **Database:** each request opens it briefly, so `elf auto` and the CLI can still
+  write. The trained model and this round's projections are cached and rebuilt when
+  the database changes. A locked database returns 503 "busy, try again".
+- **Tested end to end on 2026-11-22**, in the browser against real data. Speeds:
+  dashboard about 20 seconds on a cold start, optimizer about 16 seconds, first
+  comparison about 10 seconds, a chat answer about 40 seconds. In the chat, Claude
+  called four tools and answered with their numbers.
 
 ## Phase 9: Live season loop (ongoing)
 

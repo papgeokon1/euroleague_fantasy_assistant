@@ -383,6 +383,19 @@ def turn(
             typer.echo(f"Captain: {names[advice.current.captain]} -> {names[advice.best.captain]}")
 
 
+@app.command()
+def serve(
+    port: int = typer.Option(8000, help="Port for the web app."),
+    reload: bool = typer.Option(False, help="Restart on code changes (development)."),
+) -> None:
+    """Run the web app: the API on http://localhost:PORT/api and, once the frontend is
+    built (`npm run build` in frontend/), the app itself at http://localhost:PORT."""
+    import uvicorn
+
+    uvicorn.run("elfantasy.api.app:create_app", factory=True, host="127.0.0.1", port=port,
+                reload=reload)  # fmt: skip
+
+
 TASK_NAME = "elfantasy-auto"
 
 
