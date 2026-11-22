@@ -223,6 +223,33 @@ Claude with tool use, built on the Anthropic SDK.
 
 **Done when:** you can run the whole round from one chat, and the news layer measurably improves projections for players marked doubtful.
 
+Status (2026-11-22): built (`src/elfantasy/assistant/`) and tested live. A chat question
+("captain Vezenkov or Hifi?") took about 30 seconds: Claude called `compare_players` and
+`get_turn_advice` and answered with their numbers. A news refresh took about 2.5 minutes
+and logged 50 sourced statuses for round 14, all matched to the right players. The news
+part of "done" can't be measured until rounds with logged news have been played.
+
+- **Chat** (`elf chat`): Claude Opus 5.5 on the Messages API with a manual tool loop.
+  The loop keeps the whole conversation, thinking blocks included, and only appends to
+  it. Server-side refusal fallback is on. Nine read-only tools: `get_projections`,
+  `compare_players`, `explain_projection`, `get_schedule`, `get_my_team`,
+  `suggest_transfers` (the optimizer), `get_turn_advice`, `get_news` and
+  `refresh_news`. Nothing can change the team in the game. The system prompt tells
+  Claude to take every number from a tool and to keep its own opinions separate from
+  the optimizer's answer.
+- **Report** (`elf report`): the same assistant writes the round report (transfers,
+  lineup and captain, news and risks, watch list) to `data/reports/`.
+- **News** (`elf news --refresh`): Claude searches the web for team news, then a second
+  call turns it into structured statuses (out, doubtful, questionable, limited,
+  available). These are matched to fantasy player ids by name and team, and appended
+  to the `news_status` table. They're shown, but **not applied to the optimizer by
+  default**: the adjustment sizes are untested guesses, and CLAUDE.md requires a
+  change to beat the baseline first. `suggest_transfers` can apply them when asked.
+  `elf news --evaluate` compares the error with and without news for flagged players,
+  once their rounds are played. That measurement is this phase's remaining "done"
+  check.
+- **Setup:** put `ELF_ANTHROPIC_API_KEY=...` in `.env`, or set `ANTHROPIC_API_KEY`.
+
 ## Phase 8: Interface and automation (1 week)
 
 - Start with the CLI, then add a small web UI with Streamlit or FastAPI plus a simple frontend.

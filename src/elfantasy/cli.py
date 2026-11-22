@@ -7,6 +7,20 @@ from elfantasy.config import settings
 from elfantasy.rules import RULES_2026_27
 
 app = typer.Typer(help="EuroLeague Fantasy assistant.", no_args_is_help=True)
+
+
+@app.callback()
+def _main() -> None:
+    """EuroLeague Fantasy assistant."""
+    # Windows consoles default to a legacy code page; Claude's answers and player
+    # names need UTF-8 (dashes, accents).
+    import sys
+
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+
+
 data_app = typer.Typer(help="Download and check data.", no_args_is_help=True)
 app.add_typer(data_app, name="data")
 
@@ -367,6 +381,161 @@ def turn(
         )
         if advice.best.captain != advice.current.captain:
             typer.echo(f"Captain: {names[advice.current.captain]} -> {names[advice.best.captain]}")
+
+
+def _assistant(con):
+    """(context, tools, Anthropic client) for the chat, report and news commands."""
+    import anthropic
+
+    from elfantasy.assistant.context import FantasyContext
+    from elfantasy.assistant.tools import Tools
+    from elfantasy.data.fantasy import FantasyClient
+
+    key = settings.anthropic_api_key
+    client = anthropic.Anthropic(api_key=key) if key else anthropic.Anthropic()
+    fantasy = None
+    if settings.fantasy_token is not None:
+        fantasy = FantasyClient(
+            settings.raw_dir,
+            settings.fantasy_token.get_secret_value(),
+            league_id=settings.fantasy_league_id,
+        )
+    ctx = FantasyContext.current(con, settings.season_code, fantasy_client=fantasy)
+    return ctx, Tools(ctx, client), client
+
+
+def _no_key_help() -> None:
+    typer.echo(
+        "No Anthropic API key found. Add ELF_ANTHROPIC_API_KEY=... to .env (or set "
+        "ANTHROPIC_API_KEY), then try again.",
+        err=True,
+    )
+
+
+@app.command()
+def chat(
+    effort: str = typer.Option("medium", help="Claude's effort: low, medium, high."),
+) -> None:
+    """Chat with the assistant about your team. Type 'exit' to quit.
+
+    Claude answers with numbers from the projection model and the optimizer, through
+    read-only tools. It never changes your team in the game.
+    """
+    import anthropic
+
+    from elfantasy.assistant.chat import Assistant
+    from elfantasy.data.store import connect
+
+    with connect(settings.db_path) as con:
+        ctx, tools, client = _assistant(con)
+        bot = Assistant(
+            tools, client, effort=effort,
+            on_tool=lambda name, args: typer.echo(f"  [{name}]", err=True),
+        )  # fmt: skip
+        typer.echo(f"Round {ctx.round}. Ask about players, transfers, captain, news. "
+                   "'exit' to quit.")  # fmt: skip
+        while True:
+            try:
+                question = input("\nyou> ").strip()
+            except (EOFError, KeyboardInterrupt):
+                break
+            if question.lower() in {"exit", "quit", ""}:
+                break
+            try:
+                typer.echo(f"\n{bot.ask(question)}")
+            except anthropic.AuthenticationError:
+                _no_key_help()
+                raise typer.Exit(1) from None
+
+
+@app.command()
+def report(
+    effort: str = typer.Option("high", help="Claude's effort: low, medium, high."),
+) -> None:
+    """Write this round's report (transfers, lineup, captain, risks) to data/reports/."""
+    import anthropic
+
+    from elfantasy.assistant.chat import REPORT_PROMPT, Assistant
+    from elfantasy.data.store import connect
+
+    with connect(settings.db_path) as con:
+        ctx, tools, client = _assistant(con)
+        bot = Assistant(tools, client, effort=effort,
+                        on_tool=lambda name, args: typer.echo(f"  [{name}]", err=True))  # fmt: skip
+        typer.echo(f"Writing the round {ctx.round} report...")
+        try:
+            text = bot.ask(REPORT_PROMPT)
+        except anthropic.AuthenticationError:
+            _no_key_help()
+            raise typer.Exit(1) from None
+    path = settings.data_dir / "reports" / f"{settings.season_code}_round_{ctx.round:02d}.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text + "\n", encoding="utf-8")
+    typer.echo(f"\n{text}\n\nSaved to {path}")
+
+
+@app.command()
+def news(
+    refresh: bool = typer.Option(False, help="Search the web for the latest news first."),
+    evaluate: bool = typer.Option(
+        False, help="Check logged news against results of rounds already played."
+    ),
+) -> None:
+    """Injury and availability news for this round, as structured statuses.
+
+    Statuses are logged in the database; they don't change the optimizer's numbers
+    unless asked (`--evaluate` measures whether they would have helped).
+    """
+    import anthropic
+
+    from elfantasy.data.store import connect
+
+    with connect(settings.db_path) as con:
+        if evaluate:
+            _evaluate_news(con)
+            return
+        ctx, tools, _client = _assistant(con)
+        try:
+            text = tools.refresh_news({}) if refresh else tools.get_news({})
+        except anthropic.AuthenticationError:
+            _no_key_help()
+            raise typer.Exit(1) from None
+    typer.echo(text)
+
+
+def _evaluate_news(con) -> None:
+    import pandas as pd
+
+    from elfantasy.assistant import news as news_mod
+    from elfantasy.backtest.data import load_season
+    from elfantasy.backtest.simulator import RoundContext
+    from elfantasy.backtest.strategies import ModelV1
+
+    season = settings.season_code
+    try:
+        logged = (
+            con.execute(
+                "SELECT DISTINCT round FROM news_status WHERE season = ? ORDER BY 1", [season]
+            )
+            .df()["round"]
+            .tolist()
+        )
+    except Exception:
+        logged = []
+    data = load_season(con, season)
+    rounds = [r for r in logged if r in data.rounds]
+    if not rounds:
+        typer.echo("No logged news for a round that has been played yet.")
+        return
+    model = ModelV1(con=con)
+    for rnd in rounds:
+        market = data.market[data.market["round"] == rnd].set_index("player_id")
+        ctx = RoundContext(season, rnd, market, pd.DataFrame(), pd.DataFrame(),
+                           RULES_2026_27, None, 0.0, None)  # fmt: skip
+        pred = model.predict(ctx)
+        actual = data.outcomes[data.outcomes["round"] == rnd].set_index("player_id")["points"]
+        result = news_mod.evaluate(pred, news_mod.latest(con, season, rnd), actual)
+        typer.echo(f"Round {rnd}: {result}")
 
 
 if __name__ == "__main__":

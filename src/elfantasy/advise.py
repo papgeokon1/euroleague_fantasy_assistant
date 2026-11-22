@@ -134,6 +134,7 @@ def recommend(
     sell: set | None = None,
     model: ModelV1 | None = None,
     value_weight: float = 0.0,
+    news: pd.DataFrame | None = None,
 ) -> Recommendation:
     market = current_market(con, season, round_)
     model = model or ModelV1(con=con)
@@ -148,6 +149,10 @@ def recommend(
     preds = {r: model.predict(ctx, r) for r in rounds}
     if use_injuries:
         preds[round_] = apply_injuries(preds[round_], market)
+    if news is not None and not news.empty:
+        from elfantasy.assistant.news import apply as apply_news
+
+        preds[round_] = apply_news(preds[round_], news)
 
     proj = pd.DataFrame({r: preds[r]["expected"] for r in rounds})
     limit = None if baseline is None else rules.transfer_limit(after_round=round_ - 1)
