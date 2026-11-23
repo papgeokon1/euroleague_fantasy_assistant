@@ -9,12 +9,15 @@ export default function Optimize() {
   const [horizon, setHorizon] = useState(3)
   const [fromScratch, setFromScratch] = useState(false)
   const [applyNews, setApplyNews] = useState(false)
+  const [minStars, setMinStars] = useState(0)
   const [sell, setSell] = useState<ListedPlayer[]>([])
   const [jobId, setJobId] = useState<string | null>(null)
 
   const start = useMutation({
     mutationFn: () =>
-      api.optimize({ horizon, sell: sell.map((p) => p.id), from_scratch: fromScratch, apply_news: applyNews }),
+      api.optimize({
+        horizon, sell: sell.map((p) => p.id), from_scratch: fromScratch, apply_news: applyNews, min_stars: minStars,
+      }),
     onSuccess: (r) => setJobId(r.job_id),
   })
   const job = useQuery({
@@ -48,6 +51,21 @@ export default function Optimize() {
               {[1, 2, 3, 4, 5].map((h) => (
                 <option key={h} value={h}>
                   {h} round{h > 1 ? 's' : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1" title="A preference, not a model recommendation: in backtests, forcing stars cost about 4 points a round">
+            <span className="text-slate-600">Minimum stars (14+ credits)</span>
+            <select
+              value={minStars}
+              onChange={(e) => setMinStars(Number(e.target.value))}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2"
+            >
+              <option value={0}>No rule (recommended)</option>
+              {[2, 3, 4].map((n) => (
+                <option key={n} value={n}>
+                  At least {n}
                 </option>
               ))}
             </select>
@@ -101,7 +119,11 @@ function Plan({ r }: { r: OptimizeResult }) {
         <Stat label="Expected this round" value={fmt(r.expected_points)} hint={`planned over rounds ${r.rounds_planned.join(', ')}`} />
         <Stat label="Squad cost" value={`${fmt(r.cost)} / ${fmt(r.budget)}`} />
         <Stat label="Transfers" value={buys.length} hint={r.transfer_limit === null ? 'unlimited window' : `limit ${r.transfer_limit}`} />
-        <Stat label="News applied" value={r.news_applied ? 'yes' : 'no'} />
+        <Stat
+          label="Your rules"
+          value={r.min_stars ? `${r.min_stars}+ stars` : 'none'}
+          hint={r.news_applied ? 'news applied' : 'news not applied'}
+        />
       </div>
 
       {(buys.length > 0 || r.sell.length > 0) && (

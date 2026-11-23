@@ -21,6 +21,25 @@ COACH = "HC"
 DECAY = 0.85  # weight of each further round
 TRANSFER_COST = 0.01  # tiny cost so equal-value plans don't churn the squad
 MIP_GAP = 0.002  # stop within 0.2% of the best possible plan
+# The captain's extra share is valued at expected points plus this much of his upside
+# (chance of playing x (90% value - median)). Phase 10: 1.0 beat 0.0 in all three test
+# seasons (+6.7, +6.6, +1.9 points a round; strengths 0.5-2.0 averaged +2.7).
+CAPTAIN_UPSIDE = 1.0
+STAR_PRICE = 14.0  # "star": a player priced at this or more
+
+
+def captain_values(preds: dict, upside: float = CAPTAIN_UPSIDE) -> pd.DataFrame | None:
+    """Captain value per player for each horizon round, from projection frames with
+    p_play, q50, q90 and expected (as ModelV1.predict returns). None when upside is 0."""
+    if not upside:
+        return None
+    return pd.DataFrame(
+        {
+            r: p["expected"]
+            + upside * p["p_play"] * (p["q90"] - p["q50"]).clip(lower=0).fillna(0.0)
+            for r, p in preds.items()
+        }
+    )
 
 
 @dataclass
@@ -71,6 +90,11 @@ def optimize(
     prune: bool = True,
     value: pd.DataFrame | None = None,
     value_weight: float = 0.0,
+    transfer_cost: float = TRANSFER_COST,
+    captain_proj: pd.DataFrame | None = None,
+    bench_weight: float | None = None,
+    min_stars: int = 0,
+    star_price: float = STAR_PRICE,
 ) -> Plan:
     """Best plan over len(proj.columns) rounds.
 
@@ -84,16 +108,31 @@ def optimize(
         Owning a player through round t earns value_weight x his expected change, so
         the plan prefers players likely to rise (Phase 6). value_weight is points per
         credit of team value.
+    transfer_cost: points charged per transfer, so a move must gain more than that to
+        be worth making (a guard against chasing projection noise).
+    captain_proj: what the captain's extra share is worth per player and round (same
+        shape as proj), e.g. expected points plus some upside. Defaults to proj.
+    bench_weight: how much a bench player's expected points count in the objective.
+        Defaults to the bench multiplier; higher values reflect cover for starters.
+    min_stars: every planned squad holds at least this many players priced at
+        star_price or more (capped at how many such players the market has).
     """
     proj = proj.reindex(market.index).fillna(0.0)
+    cap_proj = proj if captain_proj is None else captain_proj.reindex(market.index).fillna(0.0)
+    cap_proj = cap_proj.set_axis(proj.columns, axis=1)
     if value is not None and value_weight:
         proj_value = value.reindex(market.index).fillna(0.0).set_axis(proj.columns, axis=1)
     else:
         proj_value = None
     current = set(current or [])
     if prune:
-        keep = candidates(market, proj, decay, current | set(forced_in or ()))
-        market, proj = market.loc[keep], proj.loc[keep]
+        must = current | set(forced_in or ())
+        if min_stars:  # keep every star, so the rule can always be met
+            must |= set(
+                market.index[(market["position"] != COACH) & (market["price"] >= star_price)]
+            )
+        keep = candidates(market, proj, decay, must)
+        market, proj, cap_proj = market.loc[keep], proj.loc[keep], cap_proj.loc[keep]
         if proj_value is not None:
             proj_value = proj_value.loc[keep]
     ids = list(market.index)
@@ -114,27 +153,30 @@ def optimize(
     formations = list(range(len(rules.starting_formations)))
     form = b("formation", (formations, rounds), cat="Binary")
 
-    m_bench = rules.bench_multiplier
+    m_bench = rules.bench_multiplier if bench_weight is None else bench_weight
     weight = {t: decay**t for t in rounds}
     objective = []
     for t in rounds:
-        p = proj.iloc[:, t]
+        p, pc = proj.iloc[:, t], cap_proj.iloc[:, t]
+        extra = rules.starter_multiplier * (rules.captain_multiplier - 1)
         for i in players:
             objective.append(
                 weight[t]
-                * p[i]
                 * (
-                    m_bench * s[i][t]
-                    + (rules.starter_multiplier - m_bench) * x[i][t]
-                    + (rules.sixth_man_multiplier - m_bench) * six[i][t]
-                    + rules.starter_multiplier * (rules.captain_multiplier - 1) * cap[i][t]
+                    p[i]
+                    * (
+                        m_bench * s[i][t]
+                        + (rules.starter_multiplier - m_bench) * x[i][t]
+                        + (rules.sixth_man_multiplier - m_bench) * six[i][t]
+                    )
+                    + pc[i] * extra * cap[i][t]
                 )
             )
         objective += [weight[t] * p[i] * s[i][t] for i in coaches]
         if proj_value is not None:
             v = proj_value.iloc[:, t]
             objective += [weight[t] * value_weight * v[i] * s[i][t] for i in ids]
-        objective += [-TRANSFER_COST * tin[i][t] for i in ids]
+        objective += [-transfer_cost * tin[i][t] for i in ids]
     prob += pulp.lpSum(objective)
 
     for t in rounds:
@@ -146,6 +188,9 @@ def optimize(
         for _club, group in market.loc[players].groupby("team_code"):
             prob += pulp.lpSum(s[i][t] for i in group.index) <= rules.max_players_per_club
         prob += pulp.lpSum(price[i] * s[i][t] for i in ids) <= budget
+        if min_stars:
+            stars = [i for i in players if price[i] >= star_price]
+            prob += pulp.lpSum(s[i][t] for i in stars) >= min(min_stars, len(stars))
 
         # Lineup: five starters in an allowed formation, a sixth man, a captain.
         prob += pulp.lpSum(form[k][t] for k in formations) == 1
@@ -174,7 +219,9 @@ def optimize(
     for i in forced_in or ():
         prob += s[i][0] == 1
 
-    solver = pulp.HiGHS(msg=False, timeLimit=time_limit, gapRel=MIP_GAP, log_to_console=False)
+    solver = pulp.HiGHS(
+        msg=False, timeLimit=time_limit, gapRel=MIP_GAP, log_to_console=False, threads=1
+    )
     result = prob.solve(solver)
     status = pulp.LpSolveStatus(result.status)
     # A time-limited solve still returns its best plan so far.

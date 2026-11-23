@@ -97,3 +97,40 @@ def test_candidates_keep_current_squad_and_cheapest(market):
     assert "AAA-C0" in pool
     for _pos, group in market.groupby("position"):
         assert group["price"].idxmin() in pool
+
+
+def test_captain_upside_picks_the_higher_ceiling(market):
+    """Two equal-expected players: the one with more upside gets the armband once the
+    captain is valued with upside."""
+    import numpy as np
+
+    from elfantasy.optimize import captain_values
+
+    proj = proj_for(market)
+    a, b = "HHH-F2", "HHH-G2"  # the two best players
+    proj.loc[[a, b], 0] = 30.0
+    pred = pd.DataFrame({"expected": proj[0], "p_play": 1.0, "q50": proj[0],
+                         "q90": proj[0] + np.where(proj.index == b, 15.0, 2.0)},
+                        index=market.index)  # fmt: skip
+    plain = optimize(market, proj, R, budget=1000)
+    upside = optimize(market, proj, R, budget=1000, captain_proj=captain_values({0: pred}, 1.0))
+    assert {plain.captain[0], upside.captain[0]} <= {a, b}
+    assert upside.captain[0] == b
+    assert captain_values({0: pred}, 0.0) is None
+
+
+def test_min_stars(market):
+    """With little budget the best plan holds few expensive players; the rule forces
+    at least N players priced at star_price or more."""
+    proj = proj_for(market)
+    cheap = optimize(market, proj, R, budget=85)
+    star_price = float(market["price"].quantile(0.8))
+
+    def stars(plan):
+        return sum(market.at[p, "price"] >= star_price and market.at[p, "position"] != "HC"
+                   for p in plan.squads[0])  # fmt: skip
+
+    forced = optimize(market, proj, R, budget=85, min_stars=4, star_price=star_price)
+    assert stars(forced) >= 4
+    assert stars(forced) >= stars(cheap)
+    assert forced.objective <= cheap.objective + 1e-6  # a rule can only cost expected points

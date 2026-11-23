@@ -366,6 +366,66 @@ backtest scores look good. After the other phases, work on the quality of the te
 themselves. Start from the user's concrete complaints, and compare suggested squads
 with what strong real managers pick, not only with backtest totals.
 
+Status (2026-11-23): first pass done. The complaint was **too few stars**, and the
+target was to **look like top managers**.
+
+- **The projections aren't the cause.** Over rounds 1–13 they're calibrated in every
+  price tier (14–17 credits: expected 13.8, actual 14.3; 17+: 20.6 against 20.9).
+- **The star gap is real.** The optimizer's backtest squads held 1.8 players at 14+
+  credits per round, against 2.5 in the user's real rosters (widest in rounds 2–6).
+  The user also outscored the optimizer by about 21 points a round (2,049 against
+  1,774). The same total budget went on the six scoring slots (72 credits); the user
+  spent more on the bench.
+- **Top managers' squads aren't readable** through the API (403), so overall
+  ownership (`popularity`) is the available proxy.
+- **Test bed:** past seasons with estimated prices (`backtest/synthetic.py`). Starting
+  prices come from the previous-season average (correlation 0.92 with real round-1
+  prices). The fitted price formula is applied each round. These seasons are used
+  only to compare variants with each other. `elf backtest-variants` runs the
+  comparison in parallel.
+- **Results** (points per round; estimated 2024-25 and 2025-26, real 2026-27): one
+  season's path varies by about ±5 a round from luck alone, so only consistent
+  patterns count.
+
+  | Variant | 2024-25 | 2025-26 | 2026-27 |
+  |---|---|---|---|
+  | original optimizer | 166.0 | 138.6 | 136.4 |
+  | **captain upside 1.0 (shipped)** | **172.7** | **145.2** | **138.3** |
+  | captain upside 0.5 / 0.75 / 1.5 / 2.0 | 163.0 / 160.1 / 164.5 / 176.0 | 139.5 / 148.0 / 135.8 / 140.2 | 132.4 / 144.7 / 138.3 / 147.6 |
+  | bench weight 0.7 | 178.5 | 138.6 | 140.4 |
+  | transfer cost 2 / 4 | 177.5 / 155.3 | 135.6 / 140.3 | 138.3 / 128.5 |
+
+  Captain upside, which values the captain at expected points plus his chance of
+  playing × (90% value − median), beat the original in 10 of 15 runs across
+  strengths, by +2.7 a round on average. Strength 1.0 is the only one positive in all
+  three seasons, so it's now the default (`optimize.CAPTAIN_UPSIDE`) in the backtest,
+  `elf optimize`, `elf auto` and the web app. Transfer cost and bench weight were
+  inconsistent and aren't shipped.
+- **Minimum stars, tested:** a rule forcing the squad to hold at least N players
+  priced 14+ (gain per round over the shipped default):
+
+  | Rule | 2024-25 | 2025-26 | 2026-27 |
+  |---|---|---|---|
+  | at least 2 stars | −3.3 | −9.1 | +0.7 |
+  | at least 3 stars | +2.3 | −7.6 | −7.8 |
+  | at least 4 stars | −2.4 | −9.8 | −0.8 |
+
+  7 of 9 runs were worse, by about −4 a round on average, although the squads did hold
+  3–4 stars. So stars alone don't explain why the user outscores the optimizer. The
+  user's edge more likely comes from what the model can't see: news, minutes and
+  rotation reads, and live in-round decisions. The rule **isn't a default**. It's
+  offered as a personal preference (`elf optimize --min-stars N`, and on the Optimize
+  page), and the result shows its cost: in round 14, forcing 5 stars took expected
+  points from 156.4 to 148.5.
+- **Experiments** now compute projections once per season and share them across
+  variants (`models/experiments/`). That saved only about 15% (36 against 42 minutes),
+  because the optimizer's solve dominates. Cached runs reproduce uncached ones exactly.
+- **Where the gap is now:** the user beats the optimizer by about 21 points a round,
+  and the measured settings recover about 2–5. The rest looks like information
+  (news, lineups) and live decisions. The levers that are left: feed news into
+  projections once `elf news --evaluate` shows it helps (from round 14 on), widen the
+  10–90% ranges (they cover 78%, not 80%), and model minutes more directly.
+
 ---
 
 ## Suggested order

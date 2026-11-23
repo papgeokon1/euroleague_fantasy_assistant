@@ -199,6 +199,28 @@ def backtest_turns(
     typer.echo(summarize(results).round(2).to_string(index=False))
 
 
+@app.command("backtest-variants")
+def backtest_variants(
+    seasons: list[int] = typer.Option([2024, 2025, 2026], "--season", help="Season start year."),
+    workers: int = typer.Option(6, help="Parallel processes."),
+) -> None:
+    """Compare optimizer settings (transfer cost, captain upside, bench weight) over
+    several seasons. Seasons without real prices use estimated prices."""
+    import pandas as pd
+
+    from elfantasy.backtest.variants import compare
+    from elfantasy.data.euroleague import season_code
+
+    df = compare(str(settings.db_path), [season_code(s) for s in seasons], workers=workers)
+    typer.echo(df.round(2).to_string(index=False))
+    pivot = df.pivot(index="variant", columns="season", values="per_round")
+    base = pivot.loc["base"]
+    typer.echo()
+    typer.echo("Points per round, and the gain over base:")
+    gains = (pivot - base).round(1).add_suffix(" gain")
+    typer.echo(pd.concat([pivot.round(1), gains], axis=1).to_string())
+
+
 @app.command()
 def optimize(
     horizon: int = typer.Option(3, help="Rounds to plan ahead (1 = this round only)."),
@@ -210,6 +232,9 @@ def optimize(
     team_id: int = typer.Option(None, help="Fantasy team id (default: your first team)."),
     value_weight: float = typer.Option(
         0.0, help="Points per credit of expected price rise (0 = ignore prices)."
+    ),
+    min_stars: int = typer.Option(
+        0, help="Hold at least this many players priced 14+ (a preference: it costs points)."
     ),
 ) -> None:
     """Recommend transfers, lineup and captain for the upcoming round.
@@ -265,7 +290,8 @@ def optimize(
         typer.echo(f"Round {md['number']}: budget {state['credits']}, training the model...")
         rec = recommend(con, season, md["number"], RULES_2026_27, float(state["credits"]),
                         baseline, horizon=horizon, use_injuries=injuries,
-                        sell=sell_ids, value_weight=value_weight)  # fmt: skip
+                        sell=sell_ids, value_weight=value_weight,
+                        min_stars=min_stars)  # fmt: skip
 
     t = rec.table
     view = pd.DataFrame(

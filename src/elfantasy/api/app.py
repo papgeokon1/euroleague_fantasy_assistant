@@ -34,6 +34,7 @@ class OptimizeRequest(BaseModel):
     sell: list[int] = []
     from_scratch: bool = False
     apply_news: bool = False
+    min_stars: int = Field(0, ge=0, le=6)
 
 
 class ChatRequest(BaseModel):
@@ -107,7 +108,7 @@ def create_app(settings=None, rules=RULES_2026_27, frontend_dist: Path = FRONTEN
         def run():
             with state.session() as ctx:
                 return service.optimize(ctx, body.horizon, body.sell, body.from_scratch,
-                                        body.apply_news)  # fmt: skip
+                                        body.apply_news, body.min_stars)  # fmt: skip
 
         job = state.submit("optimize", run)
         return {"job_id": job.id, "status": job.status}

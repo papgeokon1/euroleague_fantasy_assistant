@@ -135,6 +135,7 @@ def recommend(
     model: ModelV1 | None = None,
     value_weight: float = 0.0,
     news: pd.DataFrame | None = None,
+    min_stars: int = 0,
 ) -> Recommendation:
     market = current_market(con, season, round_)
     model = model or ModelV1(con=con)
@@ -170,8 +171,11 @@ def recommend(
                                            preds[r]["mean"], is_coach) for r in rounds},
                 index=market.index,
             )  # fmt: skip
+    from elfantasy.optimize import captain_values
+
     plan = optimize(market, proj, rules, budget, baseline, limits, forced_out=sell,
-                    value=value, value_weight=value_weight)  # fmt: skip
+                    value=value, value_weight=value_weight,
+                    captain_proj=captain_values(preds), min_stars=min_stars)  # fmt: skip
 
     squad = plan.squads[0]
     p0 = preds[round_]

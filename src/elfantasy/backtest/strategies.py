@@ -233,6 +233,9 @@ class ModelV1(GreedyPicker):
         self._features = None
         self._models: dict[str, tuple] = {}
         self._expected: pd.Series | None = None
+        # (season, as-of round, target round) -> predictions. Experiments fill it once
+        # and share it across variants, since projections don't depend on the optimizer.
+        self.prediction_cache: dict | None = None
 
     def _load(self):
         if self._logs is None:
@@ -298,6 +301,9 @@ class ModelV1(GreedyPicker):
         `target_round` projects a later round using only what is known before
         ctx.round's deadline (that round's matchups come from the schedule)."""
         target = ctx.round if target_round is None else target_round
+        key = (ctx.season, ctx.round, target)
+        if self.prediction_cache is not None and key in self.prediction_cache:
+            return self.prediction_cache[key].reindex(ctx.market.index)
         from elfantasy.model.features import build_features
 
         logs = self._load()
@@ -349,6 +355,11 @@ class ModelILP(ModelV1):
     name = "model_ilp"
     horizon = 3
     value_weight = 0.0  # points per credit of expected price rise (Phase 6)
+    # Phase 10 settings (defaults = the original optimizer):
+    transfer_cost = 0.01  # points charged per transfer
+    captain_upside = None  # None = optimize.CAPTAIN_UPSIDE; 0 = the original optimizer
+    bench_weight = None  # objective weight of bench players (None = bench multiplier)
+    min_stars = 0  # squad must hold at least this many players priced >= star_price
 
     def pick(self, ctx: RoundContext, projections: pd.Series) -> Lineup:
         from elfantasy.optimize import optimize
@@ -363,8 +374,14 @@ class ModelILP(ModelV1):
             ctx.rules.transfer_limit(after_round=r - 1) for r in rounds[1:]
         ]
         current = ctx.lineup.squad if ctx.lineup else None
+        from elfantasy.optimize import CAPTAIN_UPSIDE, captain_values
+
+        upside = CAPTAIN_UPSIDE if self.captain_upside is None else self.captain_upside
+        captain = captain_values(preds, upside)
         plan = optimize(ctx.market, proj, ctx.rules, ctx.budget, current, limits,
-                        value=value, value_weight=self.value_weight)  # fmt: skip
+                        value=value, value_weight=self.value_weight,
+                        transfer_cost=self.transfer_cost, captain_proj=captain,
+                        bench_weight=self.bench_weight, min_stars=self.min_stars)  # fmt: skip
         coach = next(p for p in plan.squads[0] if ctx.market.at[p, "position"] == COACH)
         players = tuple(sorted(plan.squads[0] - {coach}, key=str))
         return Lineup(

@@ -89,6 +89,7 @@ export interface OptimizeResult {
   transfer_limit: number | null
   expected_points: number
   news_applied: boolean
+  min_stars: number
   squad: OptimizedPlayer[]
   sell: Player[]
 }
@@ -98,6 +99,7 @@ export interface OptimizeOptions {
   sell: number[]
   from_scratch: boolean
   apply_news: boolean
+  min_stars: number
 }
 
 export interface Job<T> {

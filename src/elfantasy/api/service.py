@@ -175,7 +175,8 @@ def team(ctx: FantasyContext) -> dict:
 
 
 def optimize(ctx: FantasyContext, horizon: int = 3, sell: list[int] | None = None,
-             from_scratch: bool = False, apply_news: bool = False) -> dict:  # fmt: skip
+             from_scratch: bool = False, apply_news: bool = False,
+             min_stars: int = 0) -> dict:  # fmt: skip
     from elfantasy.advise import recommend
 
     client = ctx.fantasy_client
@@ -190,7 +191,8 @@ def optimize(ctx: FantasyContext, horizon: int = 3, sell: list[int] | None = Non
             baseline = {p["id"] for p in client.roster(team_id, prev["id"])["players"]}
     news = news_mod.latest(ctx.con, ctx.season, ctx.round) if apply_news else None
     rec = recommend(ctx.con, ctx.season, ctx.round, ctx.rules, budget, baseline,
-                    horizon=horizon, sell=set(sell or []), model=ctx.model, news=news)  # fmt: skip
+                    horizon=horizon, sell=set(sell or []), model=ctx.model, news=news,
+                    min_stars=min_stars)  # fmt: skip
     squad = rec.plan.squads[0]
     pred = rec.table[["p_play", "q10", "q50", "q90", "expected"]]
     rows = _player_rows(ctx, rec.table.index, pred=pred)
@@ -207,6 +209,7 @@ def optimize(ctx: FantasyContext, horizon: int = 3, sell: list[int] | None = Non
         "transfer_limit": rec.transfer_limit,
         "expected_points": round(float((rows["expected"] * mult).sum()), 1),
         "news_applied": apply_news,
+        "min_stars": min_stars,
         "squad": records(rows),
         "sell": records(_player_rows(ctx, sold)) if sold else [],
     }
